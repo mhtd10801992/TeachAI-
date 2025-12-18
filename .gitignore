@@ -32,6 +32,8 @@ logs
 # Firebase
 firebase-debug.log
 .firebase/
+firebase-admin-key.json
+**/firebase-admin-key.json
 
 # Temporary files
 .tmp/

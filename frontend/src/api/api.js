@@ -5,7 +5,7 @@ const getBaseURL = () => {
   // Check if running in production (deployed)
   if (import.meta.env.PROD) {
     // Use environment variable if set, otherwise use default production URL
-    return import.meta.env.VITE_API_URL || 'https://your-backend-url.com/api';
+    return import.meta.env.VITE_API_URL || 'https://teachai-api--try1-7d848.us-east4.hosted.app/api';
   }
   // Development mode - use localhost
   return 'http://localhost:5000/api';

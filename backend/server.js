@@ -39,6 +39,31 @@ app.get('/api/test', (req, res) => {
   });
 });
 
+// Test OpenAI endpoint
+app.get('/api/test-openai', async (req, res) => {
+  try {
+    const { processWithAI } = await import('./services/aiService.js');
+    const testResult = await processWithAI('This is a test document to verify OpenAI integration is working correctly.', {
+      summarize: true,
+      extractTopics: false,
+      findEntities: false,
+      analyzeSentiment: false
+    });
+    res.json({
+      success: true,
+      message: 'OpenAI is working!',
+      isMockResponse: testResult.summary.includes('configure your API key'),
+      summary: testResult.summary
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      details: error.stack
+    });
+  }
+});
+
 app.use("/api/upload", uploadRoutes);
 app.use("/api/validation", validationRoutes);
 app.use("/api/documents", documentRoutes);

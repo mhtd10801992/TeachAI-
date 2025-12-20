@@ -1,5 +1,7 @@
 # TeachAI - AI Document Ingestion Platform
 
+🚀 **Live Demo**: https://try1-7d848.web.app
+
 A full-stack application for uploading, processing, and extracting insights from documents using AI.
 
 ## 🚀 Quick Start

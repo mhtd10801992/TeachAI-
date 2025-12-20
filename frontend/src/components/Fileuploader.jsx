@@ -1,6 +1,7 @@
 import { useState } from "react";
 import API from "../api/api";
 import AIAnalysisDisplay from "./AIAnalysisDisplay";
+import DocumentSummaryCard from "./DocumentSummaryCard";
 
 export default function FileUploader() {
   const [file, setFile] = useState(null);
@@ -276,6 +277,11 @@ export default function FileUploader() {
               </div>
             </div>
           </div>
+
+          {/* Document Summary Card */}
+          {response.document && (
+            <DocumentSummaryCard document={response.document} />
+          )}
 
           {/* AI Analysis Display */}
           <AIAnalysisDisplay 

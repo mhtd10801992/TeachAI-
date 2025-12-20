@@ -1,12 +1,24 @@
 import axios from "axios";
 
+// Determine API base URL based on environment
+const getBaseURL = () => {
+  // Check if running in production (deployed)
+  if (import.meta.env.PROD) {
+    // Use environment variable if set, otherwise use default production URL
+    return import.meta.env.VITE_API_URL || 'https://your-backend-url.com/api';
+  }
+  // Development mode - use localhost
+  return 'http://localhost:5000/api';
+};
+
 const API = axios.create({
-  baseURL: "http://localhost:5000/api"
+  baseURL: getBaseURL()
 });
 
 // Add request interceptor for debugging
 API.interceptors.request.use(request => {
   console.log('🌐 Making API request to:', request.url);
+  console.log('📍 Base URL:', request.baseURL);
   return request;
 });
 
@@ -20,6 +32,7 @@ API.interceptors.response.use(
     console.error('❌ API request failed:', error.message);
     if (error.code === 'ERR_NETWORK') {
       console.error('🚫 Network error - Backend server may not be running');
+      console.error('🔗 Attempting to connect to:', error.config.baseURL);
     }
     return Promise.reject(error);
   }

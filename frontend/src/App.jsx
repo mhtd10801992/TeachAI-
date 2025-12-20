@@ -1,11 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import FileUploader from "./components/Fileuploader";
 import ValidationDashboard from "./components/ValidationDashboard";
 import DocumentHistory from "./components/DocumentHistory";
+import DocumentSummaryCard from "./components/DocumentSummaryCard";
+import AIChat from "./components/AIChat";
+import API from "./api/api";
 import './main.css';
 
 function App() {
   const [currentView, setCurrentView] = useState('upload');
+  const [documents, setDocuments] = useState([]);
+
+  // Load documents for chat
+  useEffect(() => {
+    const loadDocuments = async () => {
+      try {
+        const response = await API.get('/documents');
+        setDocuments(response.data.documents || []);
+      } catch (error) {
+        console.error('Failed to load documents:', error);
+      }
+    };
+    
+    if (currentView === 'chat') {
+      loadDocuments();
+    }
+  }, [currentView]);
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -51,7 +71,7 @@ function App() {
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button
               onClick={() => setCurrentView('upload')}
               className={currentView === 'upload' ? 'btn btn-primary' : 'btn btn-secondary'}
@@ -67,10 +87,40 @@ function App() {
             </button>
             
             <button
+              onClick={() => setCurrentView('chat')}
+              className={currentView === 'chat' ? 'btn btn-primary' : 'btn btn-secondary'}
+            >
+              💬 AI Chat
+            </button>
+            
+            <button
               onClick={() => setCurrentView('validation')}
               className={currentView === 'validation' ? 'btn btn-primary' : 'btn btn-secondary'}
             >
               🔍 Validation Dashboard
+            </button>
+            
+            <div style={{
+              width: '2px',
+              height: '30px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              margin: '0 8px'
+            }}></div>
+            
+            <button
+              onClick={() => window.open('http://localhost:3000', '_blank')}
+              className="btn btn-secondary"
+              title="Open ManPro - Project Management"
+            >
+              📊 ManPro
+            </button>
+            
+            <button
+              onClick={() => window.open('http://localhost:3001', '_blank')}
+              className="btn btn-secondary"
+              title="Open AI Workflow Tool"
+            >
+              🔄 Workflow
             </button>
           </div>
         </div>
@@ -189,6 +239,8 @@ function App() {
           </div>
         ) : currentView === 'history' ? (
           <DocumentHistory />
+        ) : currentView === 'chat' ? (
+          <AIChat documents={documents} />
         ) : (
           <ValidationDashboard />
         )}

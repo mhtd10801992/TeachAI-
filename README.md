@@ -2,6 +2,29 @@
 
 A full-stack application for uploading, processing, and extracting insights from documents using AI.
 
+## 🚀 Quick Start
+
+### Local Development
+
+```powershell
+# Start both backend and frontend
+.\start-dev.ps1
+```
+
+- Frontend: http://localhost:5173
+- Backend: http://localhost:5000
+
+### Deploy to Production
+
+```powershell
+# Deploy frontend to Firebase Hosting
+.\deploy.ps1
+```
+
+Your app will be live at: **https://try1-7d848.web.app**
+
+📖 **Full deployment guide:** See [QUICKSTART_DEPLOY.md](QUICKSTART_DEPLOY.md)
+
 ## 🏗️ **Architecture Overview**
 
 ```
@@ -28,6 +51,7 @@ A full-stack application for uploading, processing, and extracting insights from
 ## 📊 **Complete Data Processing Flow**
 
 ### **Phase 1: File Upload & Storage**
+
 ```
 1. User selects document (PDF, DOC, TXT, etc.)
 2. Frontend validates file type and size
@@ -37,6 +61,7 @@ A full-stack application for uploading, processing, and extracting insights from
 ```
 
 ### **Phase 2: Content Extraction**
+
 ```
 6. Backend detects file type
 7. Text extraction:
@@ -48,6 +73,7 @@ A full-stack application for uploading, processing, and extracting insights from
 ```
 
 ### **Phase 3: AI Processing**
+
 ```
 9. Text sent to OpenAI GPT for:
    - Content summarization
@@ -59,6 +85,7 @@ A full-stack application for uploading, processing, and extracting insights from
 ```
 
 ### **Phase 4: Vector Storage**
+
 ```
 12. Document chunks converted to embeddings
 13. Stored in Pinecone vector database
@@ -67,6 +94,7 @@ A full-stack application for uploading, processing, and extracting insights from
 ```
 
 ### **Phase 5: Query & Retrieval**
+
 ```
 16. User submits question about documents
 17. Question converted to embedding
@@ -79,19 +107,22 @@ A full-stack application for uploading, processing, and extracting insights from
 ## 💡 **AI Processing Capabilities**
 
 ### **Document Analysis**
+
 - **Summarization**: Auto-generate executive summaries
-- **Key Topics**: Extract main themes and subjects  
+- **Key Topics**: Extract main themes and subjects
 - **Entity Recognition**: Find people, places, organizations
 - **Sentiment**: Analyze emotional tone
 - **Classification**: Auto-categorize by document type
 
 ### **Smart Search**
+
 - **Semantic Search**: Find meaning, not just keywords
 - **Question Answering**: Ask natural language questions
 - **Cross-Reference**: Find connections between documents
 - **Similarity**: Find documents with similar content
 
 ### **Output Formats**
+
 ```json
 {
   "document": {
@@ -228,6 +259,7 @@ FIREBASE_STORAGE_BUCKET=your-bucket.appspot.com
 ```
 
 ### **Enhanced Phase 3: AI Processing with Human Validation**
+
 ```
 9. AI processes document and assigns confidence scores
 10. If confidence < threshold (e.g., 80%):
@@ -244,6 +276,7 @@ FIREBASE_STORAGE_BUCKET=your-bucket.appspot.com
 ```
 
 ### **Phase 4: User Validation Interface**
+
 ```
 14. Show side-by-side comparison:
     - Original text excerpt

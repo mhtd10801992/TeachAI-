@@ -5,10 +5,16 @@ dotenv.config();
 
 // Initialize OpenAI only if we have a valid API key
 let openai = null;
-if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'sk-placeholder_get_real_key_from_openai_platform') {
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
+const apiKey = process.env.OPENAI_API_KEY;
+if (apiKey && apiKey !== 'sk-placeholder_get_real_key_from_openai_platform' && apiKey !== 'your_openai_api_key_here') {
+  try {
+    openai = new OpenAI({
+      apiKey: apiKey
+    });
+    console.log('✅ OpenAI API initialized in aiController');
+  } catch (error) {
+    console.log('⚠️  OpenAI initialization failed:', error.message);
+  }
 } else {
   console.log('⚠️  OpenAI API key not configured. AI features will use mock responses.');
 }

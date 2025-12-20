@@ -2,11 +2,19 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables (only works locally, Cloud Run uses secrets directly)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 // Check if OpenAI API key is configured
 const apiKey = process.env.OPENAI_API_KEY;
+console.log('🔑 OpenAI API Key check:', {
+  exists: !!apiKey,
+  length: apiKey?.length,
+  startsWithSk: apiKey?.startsWith('sk-'),
+  first10: apiKey?.substring(0, 10)
+});
 const hasOpenAI = apiKey && apiKey !== 'your_openai_api_key_here' && apiKey.startsWith('sk-');
 
 let openai;

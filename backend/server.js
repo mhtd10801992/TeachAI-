@@ -21,7 +21,12 @@ const initializeApp = async () => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Backend is running' });
+  res.json({ 
+    status: 'OK', 
+    message: 'Backend is running',
+    openaiConfigured: !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith('sk-'),
+    firebaseConfigured: !!process.env.FIREBASE_PROJECT_ID
+  });
 });
 
 // Test endpoint for documents

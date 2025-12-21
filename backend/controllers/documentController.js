@@ -19,8 +19,30 @@ const initializeDocumentCache = async () => {
 
 // Save a processed document to history (both memory and Firebase)
 export const saveDocument = async (documentData) => {
+  // Auto-categorize document based on topics
+  let category = 'General';
+  if (documentData.document?.analysis?.topics?.items) {
+    const topics = documentData.document.analysis.topics.items;
+    const topicsStr = typeof topics === 'string' ? topics.toLowerCase() : topics.join(' ').toLowerCase();
+    
+    // Simple categorization logic
+    if (topicsStr.includes('automotive') || topicsStr.includes('vehicle') || topicsStr.includes('car')) {
+      category = 'Automotive';
+    } else if (topicsStr.includes('epa') || topicsStr.includes('environment') || topicsStr.includes('emission')) {
+      category = 'Environmental';
+    } else if (topicsStr.includes('cost') || topicsStr.includes('manufacturing') || topicsStr.includes('production')) {
+      category = 'Manufacturing';
+    } else if (topicsStr.includes('technology') || topicsStr.includes('innovation')) {
+      category = 'Technology';
+    } else if (topicsStr.includes('policy') || topicsStr.includes('regulation') || topicsStr.includes('compliance')) {
+      category = 'Policy & Regulation';
+    }
+  }
+  
   const document = {
     ...documentData,
+    category: category,
+    tags: extractTags(documentData),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -31,7 +53,7 @@ export const saveDocument = async (documentData) => {
   if (firebaseResult.success) {
     // Add to memory cache only if Firebase save succeeded
     documentHistory.unshift(document); // Add to beginning of array
-    console.log(`Document saved to Firebase: ${document.document.filename} (ID: ${document.document.id})`);
+    console.log(`Document saved to Firebase: ${document.document.filename} (Category: ${category}, ID: ${document.document.id})`);
     return document;
   } else {
     console.error('Failed to save document to Firebase:', firebaseResult.error);
@@ -39,22 +61,49 @@ export const saveDocument = async (documentData) => {
   }
 };
 
+// Helper function to extract tags from document
+const extractTags = (documentData) => {
+  const tags = [];
+  const analysis = documentData.document?.analysis;
+  
+  if (analysis?.topics?.items) {
+    const topics = typeof analysis.topics.items === 'string' 
+      ? analysis.topics.items.split(/[,\n]/).map(t => t.trim())
+      : analysis.topics.items;
+    tags.push(...topics.slice(0, 5)); // Max 5 topic tags
+  }
+  
+  return [...new Set(tags)]; // Remove duplicates
+};
+
 // Get all documents from history
 export const getAllDocuments = async (req, res) => {
   try {
+    const { category } = req.query;
+    
     console.log(`📊 Fetching documents - Cache has ${documentHistory.length} documents`);
     
     // Sort by most recent first
-    const sortedDocuments = documentHistory.sort((a, b) => 
+    let sortedDocuments = documentHistory.sort((a, b) => 
       new Date(b.createdAt) - new Date(a.createdAt)
     );
+    
+    // Filter by category if specified
+    if (category && category !== 'all') {
+      sortedDocuments = sortedDocuments.filter(doc => doc.category === category);
+      console.log(`Filtered to ${sortedDocuments.length} documents in category: ${category}`);
+    }
+    
+    // Get unique categories for the response
+    const categories = [...new Set(documentHistory.map(doc => doc.category || 'General'))];
     
     console.log(`📤 Sending ${sortedDocuments.length} documents to frontend`);
     
     res.json({
       success: true,
       documents: sortedDocuments,
-      total: sortedDocuments.length
+      total: sortedDocuments.length,
+      categories: categories
     });
   } catch (error) {
     console.error('❌ Error fetching documents:', error);
@@ -248,6 +297,59 @@ export const updateDocumentAnalysis = async (req, res) => {
   } catch (error) {
     console.error('Error updating document analysis:', error);
     res.status(500).json({ error: "Failed to update document analysis" });
+  }
+};
+
+// Update validation point resolution
+export const updateValidationPoint = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pointId, resolution } = req.body;
+    
+    // Find the document in cache
+    const documentIndex = documentHistory.findIndex(doc => doc.document.id === id);
+    
+    if (documentIndex === -1) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+    
+    // Update the validation point
+    if (documentHistory[documentIndex].document.analysis?.validationPoints) {
+      const validationPoints = documentHistory[documentIndex].document.analysis.validationPoints;
+      const pointIndex = validationPoints.findIndex(vp => vp.id === pointId);
+      
+      if (pointIndex !== -1) {
+        validationPoints[pointIndex] = {
+          ...validationPoints[pointIndex],
+          resolved: true,
+          userResolution: resolution,
+          resolvedAt: new Date().toISOString()
+        };
+        
+        documentHistory[documentIndex].updatedAt = new Date().toISOString();
+        
+        // Save to Firebase/storage
+        const saveResult = await saveDocumentToFirebase(documentHistory[documentIndex]);
+        
+        if (saveResult.success) {
+          return res.json({
+            success: true,
+            message: "Validation point updated successfully",
+            validationPoint: validationPoints[pointIndex]
+          });
+        } else {
+          return res.status(500).json({
+            error: "Failed to save validation update",
+            details: saveResult.error
+          });
+        }
+      }
+    }
+    
+    return res.status(404).json({ error: "Validation point not found" });
+  } catch (error) {
+    console.error('Error updating validation point:', error);
+    res.status(500).json({ error: "Failed to update validation point" });
   }
 };
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import API from '../api/api';
 import AIAnalysisDisplay from './AIAnalysisDisplay';
 
-export default function DocumentHistory() {
+export default function DocumentHistory({ onReview }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -356,6 +356,7 @@ export default function DocumentHistory() {
               document={doc}
               onView={() => viewDocument(doc)}
               onDelete={() => deleteDocument(doc.document.id)}
+              onReview={() => onReview && onReview(doc.document.id)}
               formatDate={formatDate}
               formatFileSize={formatFileSize}
             />
@@ -396,7 +397,7 @@ const StatCard = ({ icon, title, value, color }) => (
 );
 
 // Document Card Component
-const DocumentCard = ({ document, onView, onDelete, formatDate, formatFileSize }) => {
+const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, formatFileSize }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'processed': return 'var(--success)';
@@ -519,6 +520,20 @@ const DocumentCard = ({ document, onView, onDelete, formatDate, formatFileSize }
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {onReview && (
+            <button 
+              onClick={onReview}
+              className="btn btn-secondary"
+              style={{ 
+                padding: '8px 16px', 
+                fontSize: '13px',
+                background: 'var(--primary-gradient)',
+                border: 'none'
+              }}
+            >
+              🔍 Comprehensive Review
+            </button>
+          )}
           <button 
             onClick={onView}
             className="btn btn-primary"

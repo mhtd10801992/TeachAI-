@@ -6,7 +6,8 @@ import {
   deleteDocument,
   searchDocuments,
   getDocumentStats,
-  updateDocumentAnalysis
+  updateDocumentAnalysis,
+  updateValidationPoint
 } from '../controllers/documentController.js';
 
 const router = express.Router();
@@ -25,6 +26,9 @@ router.get('/:id', getDocumentById);
 
 // Update document analysis
 router.put('/:id', updateDocumentAnalysis);
+
+// Update validation point resolution
+router.put('/:id/validation', updateValidationPoint);
 
 // Delete document by ID
 router.delete('/:id', deleteDocument);

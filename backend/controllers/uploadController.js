@@ -67,7 +67,14 @@ export const handleUpload = async (req, res) => {
             value: mockAnalysis.sentiment,
             confidence: mockAnalysis.sentimentConfidence,
             needsReview: mockAnalysis.sentimentConfidence < 0.6
-          }
+          },
+          
+          // New comprehensive analysis fields
+          insights: aiAnalysis.insights || [],
+          sections: aiAnalysis.sections || [],
+          validationPoints: aiAnalysis.validationPoints || [],
+          documentWithHighlights: aiAnalysis.documentWithHighlights || { fullText: extractedText, highlights: [] },
+          originalText: extractedText
         },
         
         // AI questions if confidence is low

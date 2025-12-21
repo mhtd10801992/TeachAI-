@@ -58,35 +58,66 @@ export const aiController = {
         });
       }
 
-      // Build context for the AI
-      let contextText = `Document: ${context.filename}\n`;
+      // Build context for the AI based on mode
+      let contextText = '';
+      let systemPrompt = "You are a helpful AI assistant that analyzes documents and answers questions about their content. Be concise, accurate, and helpful in your responses.";
       
-      if (context.summary) {
-        contextText += `Summary: ${context.summary}\n`;
-      }
-      
-      if (context.topics && context.topics.length > 0) {
-        contextText += `Topics: ${context.topics.join(', ')}\n`;
-      }
-      
-      if (context.entities && context.entities.length > 0) {
-        const entityText = context.entities.map(e => `${e.name} (${e.type})`).join(', ');
-        contextText += `Entities: ${entityText}\n`;
-      }
-      
-      if (context.sentiment) {
-        contextText += `Sentiment: ${context.sentiment.value} (${Math.round(context.sentiment.confidence * 100)}% confidence)\n`;
+      if (context.mode === 'all' && context.documents) {
+        // Multi-document search mode
+        contextText = `You have access to ${context.documentCount} documents. Here's the information:\n\n`;
+        
+        context.documents.forEach((doc, index) => {
+          contextText += `Document ${index + 1}: ${doc.filename}\n`;
+          if (doc.summary) {
+            contextText += `Summary: ${doc.summary}\n`;
+          }
+          if (doc.topics) {
+            const topicsStr = Array.isArray(doc.topics) ? doc.topics.join(', ') : doc.topics;
+            contextText += `Topics: ${topicsStr}\n`;
+          }
+          contextText += `\n`;
+        });
+        
+        systemPrompt = "You are a helpful AI assistant with access to multiple documents. When answering questions, search across all provided documents to find the most relevant information. Reference specific documents by name when providing answers.";
+      } else if (context.mode === 'single') {
+        // Single document mode
+        contextText = `Document: ${context.filename}\n`;
+        
+        if (context.summary) {
+          contextText += `Summary: ${context.summary}\n`;
+        }
+        
+        if (context.topics && context.topics.length > 0) {
+          const topicsStr = Array.isArray(context.topics) ? context.topics.join(', ') : context.topics;
+          contextText += `Topics: ${topicsStr}\n`;
+        }
+        
+        if (context.entities && context.entities.length > 0) {
+          const entityText = context.entities.map(e => {
+            if (typeof e === 'object' && e.name) {
+              return `${e.name} (${e.type})`;
+            }
+            return e;
+          }).join(', ');
+          contextText += `Entities: ${entityText}\n`;
+        }
+        
+        if (context.sentiment) {
+          contextText += `Sentiment: ${context.sentiment.value} (${Math.round(context.sentiment.confidence * 100)}% confidence)\n`;
+        }
+      } else {
+        // General mode - no specific document
+        contextText = `General question without specific document context.\n`;
       }
 
       // Create the prompt for OpenAI
-      const prompt = `You are an AI assistant helping analyze a document. Based on the following document information, please answer the user's question accurately and helpfully.
+      const prompt = `You are an AI assistant helping analyze documents. Based on the following information, please answer the user's question accurately and helpfully.
 
-Document Information:
 ${contextText}
 
 User Question: ${question}
 
-Please provide a clear, concise, and helpful answer based on the document information provided. If the information isn't sufficient to answer the question, let the user know what additional details might be needed.`;
+Please provide a clear, concise, and helpful answer based on the information provided. If the information isn't sufficient to answer the question, let the user know what additional details might be needed.`;
 
       // Call OpenAI API
       const completion = await openai.chat.completions.create({
@@ -94,14 +125,14 @@ Please provide a clear, concise, and helpful answer based on the document inform
         messages: [
           {
             role: "system",
-            content: "You are a helpful AI assistant that analyzes documents and answers questions about their content. Be concise, accurate, and helpful in your responses."
+            content: systemPrompt
           },
           {
             role: "user",
             content: prompt
           }
         ],
-        max_tokens: 500,
+        max_tokens: 600,
         temperature: 0.7
       });
 
@@ -199,6 +230,121 @@ Please provide actionable insights about:
     } catch (error) {
       console.error('OpenAI Insights Error:', error);
       res.status(500).json({ error: 'Failed to generate insights' });
+    }
+  },
+
+  async clarify(req, res) {
+    try {
+      const { documentId, text, context } = req.body;
+
+      if (!text) {
+        return res.status(400).json({ error: 'Text is required for clarification' });
+      }
+
+      if (!openai) {
+        return res.json({
+          clarification: `This text requires clarification: "${text}". The system suggests: Verify this information for accuracy and add supporting context if needed. (Configure OpenAI API key for detailed AI clarification)`,
+          suggestions: [
+            'Verify the accuracy of this information',
+            'Add supporting evidence or sources',
+            'Consider alternative interpretations',
+            'Check for missing context'
+          ],
+          mock: true
+        });
+      }
+
+      const prompt = `As an AI document analyst, I need clarification about the following text from a document:
+
+Text: "${text}"
+Context: ${context || 'No additional context provided'}
+
+Please provide:
+1. Why this text might need clarification or validation
+2. Possible alternative interpretations
+3. What additional information would help clarify this
+4. Specific suggestions for improvement
+5. Confidence level assessment`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert document analyst who helps identify ambiguities and provides clarifying suggestions."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.7
+      });
+
+      const clarification = completion.choices[0].message.content;
+
+      res.json({
+        clarification: clarification,
+        usage: completion.usage,
+        mock: false
+      });
+
+    } catch (error) {
+      console.error('OpenAI Clarification Error:', error);
+      res.status(500).json({ error: 'Failed to generate clarification' });
+    }
+  },
+
+  async explain(req, res) {
+    try {
+      const { documentId, section } = req.body;
+
+      if (!section) {
+        return res.status(400).json({ error: 'Section is required for explanation' });
+      }
+
+      if (!openai) {
+        return res.json({
+          explanation: `This section explains the ${section} of the document. It was generated through AI analysis of the document content. (Configure OpenAI API key for detailed explanations)`,
+          mock: true
+        });
+      }
+
+      const prompt = `Explain how the AI analyzed and generated the ${section} section for this document. Include:
+1. What analysis techniques were used
+2. Why this information is important
+3. How the AI determined confidence levels
+4. What users should verify or validate
+5. How to improve the analysis`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are an AI systems expert who explains how document analysis AI works in simple, understandable terms."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 250,
+        temperature: 0.7
+      });
+
+      const explanation = completion.choices[0].message.content;
+
+      res.json({
+        explanation: explanation,
+        usage: completion.usage,
+        mock: false
+      });
+
+    } catch (error) {
+      console.error('OpenAI Explanation Error:', error);
+      res.status(500).json({ error: 'Failed to generate explanation' });
     }
   }
 };

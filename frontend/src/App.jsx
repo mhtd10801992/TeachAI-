@@ -4,12 +4,14 @@ import ValidationDashboard from "./components/ValidationDashboard";
 import DocumentHistory from "./components/DocumentHistory";
 import DocumentSummaryCard from "./components/DocumentSummaryCard";
 import AIChat from "./components/AIChat";
+import ComprehensiveDocumentReview from "./components/ComprehensiveDocumentReview";
 import API from "./api/api";
 import './main.css';
 
 function App() {
   const [currentView, setCurrentView] = useState('upload');
   const [documents, setDocuments] = useState([]);
+  const [selectedDocumentForReview, setSelectedDocumentForReview] = useState(null);
 
   // Load documents for chat
   useEffect(() => {
@@ -100,6 +102,7 @@ function App() {
               🔍 Validation Dashboard
             </button>
             
+            {/* External Apps - Start separately if needed
             <div style={{
               width: '2px',
               height: '30px',
@@ -122,6 +125,7 @@ function App() {
             >
               🔄 Workflow
             </button>
+            */}
           </div>
         </div>
       </nav>
@@ -238,9 +242,20 @@ function App() {
             </div>
           </div>
         ) : currentView === 'history' ? (
-          <DocumentHistory />
+          <DocumentHistory onReview={(docId) => {
+            setSelectedDocumentForReview(docId);
+            setCurrentView('review');
+          }} />
         ) : currentView === 'chat' ? (
           <AIChat documents={documents} />
+        ) : currentView === 'review' && selectedDocumentForReview ? (
+          <ComprehensiveDocumentReview 
+            documentId={selectedDocumentForReview} 
+            onClose={() => {
+              setCurrentView('history');
+              setSelectedDocumentForReview(null);
+            }}
+          />
         ) : (
           <ValidationDashboard />
         )}

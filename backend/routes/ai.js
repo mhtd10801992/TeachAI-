@@ -9,4 +9,10 @@ router.post('/ask', aiController.askQuestion);
 // Get AI insights about document analysis
 router.post('/insights', aiController.getInsights);
 
+// Get AI clarification for validation points
+router.post('/clarify', aiController.clarify);
+
+// Get explanation about how AI analysis works
+router.post('/explain', aiController.explain);
+
 export default router;

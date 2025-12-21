@@ -6,6 +6,10 @@ export default function AIChat({ documents }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [selectedDocs, setSelectedDocs] = useState([]); // Support multiple docs
+  const [searchMode, setSearchMode] = useState('single'); // 'single' or 'all'
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -15,6 +19,24 @@ export default function AIChat({ documents }) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    // Log available documents for debugging
+    console.log('📚 Available documents in chat:', documents?.length || 0);
+    if (documents && documents.length > 0) {
+      console.log('Documents:', documents.map(d => d.document?.filename || d.filename));
+    }
+  }, [documents]);
+
+  // Get unique categories from documents
+  const categories = documents && documents.length > 0 
+    ? ['all', ...new Set(documents.map(d => d.category || 'General'))]
+    : ['all'];
+
+  // Filter documents by category
+  const filteredDocuments = selectedCategory === 'all' 
+    ? documents 
+    : documents?.filter(d => (d.category || 'General') === selectedCategory);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -31,16 +53,42 @@ export default function AIChat({ documents }) {
     setLoading(true);
 
     try {
-      const context = selectedDoc ? {
-        filename: selectedDoc.filename,
-        summary: selectedDoc.analysis?.summary?.text,
-        topics: selectedDoc.analysis?.topics?.items || [],
-        entities: selectedDoc.analysis?.entities?.items || [],
-        sentiment: selectedDoc.analysis?.sentiment
-      } : {
-        filename: 'General Query',
-        summary: 'No specific document selected'
-      };
+      let context;
+      
+      if (searchMode === 'all' && filteredDocuments && filteredDocuments.length > 0) {
+        // Search across all documents (or filtered by category)
+        context = {
+          mode: 'all',
+          documentCount: filteredDocuments.length,
+          category: selectedCategory !== 'all' ? selectedCategory : undefined,
+          documents: filteredDocuments.map(doc => ({
+            id: doc.document?.id || doc.id,
+            filename: doc.document?.filename || doc.filename,
+            summary: doc.document?.analysis?.summary?.text || doc.analysis?.summary?.text,
+            topics: doc.document?.analysis?.topics?.items || doc.analysis?.topics?.items || [],
+            entities: doc.document?.analysis?.entities?.items || doc.analysis?.entities?.items || [],
+            category: doc.category
+          }))
+        };
+      } else if (selectedDoc) {
+        // Single document mode
+        const docData = selectedDoc.document || selectedDoc;
+        context = {
+          mode: 'single',
+          filename: docData.filename,
+          summary: docData.analysis?.summary?.text,
+          topics: docData.analysis?.topics?.items || [],
+          entities: docData.analysis?.entities?.items || [],
+          sentiment: docData.analysis?.sentiment
+        };
+      } else {
+        // General query without document context
+        context = {
+          mode: 'general',
+          filename: 'General Query',
+          summary: 'No specific document selected'
+        };
+      }
 
       const response = await API.post('/ai/ask', {
         question: input,
@@ -83,14 +131,122 @@ export default function AIChat({ documents }) {
   };
 
   return (
-    <div className="glass-card" style={{
-      padding: '0',
-      borderRadius: '20px',
-      height: '700px',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
+    <div style={{ display: 'flex', gap: '20px', height: '700px' }}>
+      {/* Document Preview Panel (Left Side) */}
+      {showPreview && selectedDoc && (
+        <div className="glass-card" style={{
+          width: '350px',
+          padding: '20px',
+          borderRadius: '20px',
+          overflowY: 'auto',
+          flexShrink: 0
+        }}>
+          <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ margin: 0, fontSize: '16px' }}>📄 Document Preview</h4>
+            <button
+              onClick={() => setShowPreview(false)}
+              className="btn btn-secondary"
+              style={{ padding: '4px 8px', fontSize: '12px' }}
+            >
+              ✕
+            </button>
+          </div>
+          
+          {(() => {
+            const docData = selectedDoc.document || selectedDoc;
+            return (
+              <>
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  borderRadius: '8px',
+                  marginBottom: '15px'
+                }}>
+                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+                    {docData.filename}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Category: {selectedDoc.category || 'General'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Size: {(docData.size / 1024).toFixed(2)} KB
+                  </div>
+                </div>
+
+                {docData.analysis?.summary?.text && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+                      📝 Summary
+                    </div>
+                    <div style={{
+                      padding: '10px',
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      lineHeight: '1.6'
+                    }}>
+                      {docData.analysis.summary.text}
+                    </div>
+                  </div>
+                )}
+
+                {docData.analysis?.topics?.items && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+                      🏷️ Topics
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px'
+                    }}>
+                      {(typeof docData.analysis.topics.items === 'string' 
+                        ? docData.analysis.topics.items.split(/[,\n]/).map(t => t.trim())
+                        : docData.analysis.topics.items
+                      ).slice(0, 5).map((topic, i) => (
+                        <span key={i} style={{
+                          padding: '4px 8px',
+                          background: 'rgba(99, 102, 241, 0.2)',
+                          borderRadius: '4px',
+                          fontSize: '11px'
+                        }}>
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {docData.analysis?.sentiment && (
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+                      😊 Sentiment
+                    </div>
+                    <div style={{
+                      padding: '8px',
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '6px',
+                      fontSize: '12px'
+                    }}>
+                      {docData.analysis.sentiment.value} ({Math.round(docData.analysis.sentiment.confidence * 100)}% confidence)
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Chat Panel */}
+      <div className="glass-card" style={{
+        flex: 1,
+        padding: '0',
+        borderRadius: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}>
       {/* Header */}
       <div style={{
         padding: '20px 25px',
@@ -126,31 +282,126 @@ export default function AIChat({ documents }) {
         </div>
 
         {/* Document Selector */}
-        {documents && documents.length > 0 && (
-          <select
-            value={selectedDoc?.id || ''}
-            onChange={(e) => {
-              const doc = documents.find(d => d.id === e.target.value);
-              setSelectedDoc(doc);
-            }}
-            style={{
-              width: '100%',
-              padding: '10px',
-              borderRadius: '8px',
-              background: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: 'var(--text-primary)',
-              fontSize: '14px'
-            }}
-          >
-            <option value="">General questions (no document selected)</option>
-            {documents.map(doc => (
-              <option key={doc.id} value={doc.id}>
-                📄 {doc.filename}
-              </option>
-            ))}
-          </select>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Search Mode Toggle */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setSearchMode('single')}
+              className={searchMode === 'single' ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ flex: 1, padding: '8px', fontSize: '13px' }}
+            >
+              📄 Single Document
+            </button>
+            <button
+              onClick={() => setSearchMode('all')}
+              className={searchMode === 'all' ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ flex: 1, padding: '8px', fontSize: '13px' }}
+            >
+              📚 All Documents
+            </button>
+          </div>
+
+          {/* Category Filter */}
+          {categories.length > 2 && (
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                background: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: 'var(--text-primary)',
+                fontSize: '13px'
+              }}
+            >
+              {categories.map(cat => (
+                <option key={cat} value={cat}>
+                  {cat === 'all' ? '📁 All Categories' : `📂 ${cat}`}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Document Selector (only shown in single mode) */}
+          {searchMode === 'single' && filteredDocuments && filteredDocuments.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <select
+                value={selectedDoc?.document?.id || selectedDoc?.id || ''}
+                onChange={(e) => {
+                  const doc = filteredDocuments.find(d => 
+                    (d.document?.id || d.id) === e.target.value
+                  );
+                  setSelectedDoc(doc);
+                  if (doc) setShowPreview(true);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '8px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="">Select a document...</option>
+                {filteredDocuments.map(doc => {
+                  const docData = doc.document || doc;
+                  return (
+                    <option key={docData.id} value={docData.id}>
+                      📄 {docData.filename}
+                    </option>
+                  );
+                })}
+              </select>
+              {selectedDoc && !showPreview && (
+                <button
+                  onClick={() => setShowPreview(true)}
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 12px', fontSize: '13px' }}
+                  title="Show document preview"
+                >
+                  👁️
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Status Display */}
+          {documents && documents.length > 0 && (
+            <div style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              background: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              fontSize: '12px',
+              color: '#10b981'
+            }}>
+              {searchMode === 'all' ? (
+                <>✅ Searching across {filteredDocuments?.length || documents.length} document{(filteredDocuments?.length || documents.length) !== 1 ? 's' : ''}{selectedCategory !== 'all' ? ` in ${selectedCategory}` : ''}</>
+              ) : selectedDoc ? (
+                <>✅ Selected: {(selectedDoc.document || selectedDoc).filename}</>
+              ) : (
+                <>💡 Select a document or switch to "All Documents" mode</>
+              )}
+            </div>
+          )}
+
+          {(!documents || documents.length === 0) && (
+            <div style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              background: 'rgba(251, 191, 36, 0.1)',
+              border: '1px solid rgba(251, 191, 36, 0.3)',
+              fontSize: '12px',
+              color: '#fbbf24'
+            }}>
+              ⚠️ No documents uploaded yet. Upload documents to analyze them.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -346,6 +597,7 @@ export default function AIChat({ documents }) {
           Press Enter to send • Shift+Enter for new line
         </p>
       </div>
+    </div>
     </div>
   );
 }

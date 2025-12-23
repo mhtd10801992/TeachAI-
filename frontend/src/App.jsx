@@ -5,6 +5,7 @@ import DocumentHistory from "./components/DocumentHistory";
 import DocumentSummaryCard from "./components/DocumentSummaryCard";
 import AIChat from "./components/AIChat";
 import ComprehensiveDocumentReview from "./components/ComprehensiveDocumentReview";
+import WebAnalyzer from "./components/WebAnalyzer";
 import API from "./api/api";
 import './main.css';
 
@@ -78,7 +79,7 @@ function App() {
               onClick={() => setCurrentView('upload')}
               className={currentView === 'upload' ? 'btn btn-primary' : 'btn btn-secondary'}
             >
-              📤 Upload Documents
+              📥 Upload & Web Analysis
             </button>
             
             <button
@@ -101,31 +102,6 @@ function App() {
             >
               🔍 Validation Dashboard
             </button>
-            
-            {/* External Apps - Start separately if needed
-            <div style={{
-              width: '2px',
-              height: '30px',
-              background: 'rgba(255, 255, 255, 0.2)',
-              margin: '0 8px'
-            }}></div>
-            
-            <button
-              onClick={() => window.open('http://localhost:3000', '_blank')}
-              className="btn btn-secondary"
-              title="Open ManPro - Project Management"
-            >
-              📊 ManPro
-            </button>
-            
-            <button
-              onClick={() => window.open('http://localhost:3001', '_blank')}
-              className="btn btn-secondary"
-              title="Open AI Workflow Tool"
-            >
-              🔄 Workflow
-            </button>
-            */}
           </div>
         </div>
       </nav>
@@ -148,7 +124,7 @@ function App() {
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text'
                 }}>
-                  📄 Document Upload & AI Processing
+                  📄 Document & Web Analysis
                 </h2>
                 <p style={{ 
                   color: 'var(--text-secondary)', 
@@ -157,11 +133,32 @@ function App() {
                   margin: '0 auto',
                   lineHeight: '1.8'
                 }}>
-                  Upload documents for intelligent AI analysis. Our system extracts key information, 
-                  summarizes content, and identifies topics with human validation for accuracy.
+                  Upload documents or enter web/PDF URLs for intelligent AI analysis. 
+                  Our system extracts key information, summarizes content, and identifies topics.
                 </p>
               </div>
-              <FileUploader />
+
+              {/* Combined Interface */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+                
+                {/* Left Column: File Upload */}
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
+                    📤 Upload File
+                  </h3>
+                  <FileUploader />
+                </div>
+
+                {/* Right Column: Web Analysis */}
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
+                    🌐 Web / PDF Link
+                  </h3>
+                  <WebAnalyzer />
+                </div>
+
+              </div>
+
             </div>
 
             <div className="glass-card" style={{
@@ -190,7 +187,7 @@ function App() {
               </h3>
               <div style={{ display: 'grid', gap: '15px' }}>
                 {[
-                  { icon: '📤', title: 'Upload', desc: 'Secure document upload and storage' },
+                  { icon: '📤', title: 'Upload / Input', desc: 'Secure document upload or web URL analysis' },
                   { icon: '🧠', title: 'AI Analysis', desc: 'Extract text, summarize, identify topics and entities' },
                   { icon: '📊', title: 'Confidence Check', desc: 'Low confidence items flagged for review' },
                   { icon: '👤', title: 'Human Validation', desc: 'Review and edit AI analysis if needed' },

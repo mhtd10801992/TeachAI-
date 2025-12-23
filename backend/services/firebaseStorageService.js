@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 import { getStorage } from 'firebase-admin/storage';
 import path from 'path';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -255,26 +256,52 @@ export const loadDocumentsFromFirebase = async () => {
   }
 };
 
-// Delete document from Firebase Storage
+// Delete document from Firebase Storage or Local Storage
 export const deleteDocumentFromFirebase = async (documentId) => {
   try {
-    // Delete document metadata file
-    const docFile = bucket.file(`${FIREBASE_PATHS.DOCUMENTS}${documentId}.json`);
-    await docFile.delete();
-    
-    // Try to find and delete associated uploaded file
-    const [uploadedFiles] = await bucket.getFiles({
-      prefix: `${FIREBASE_PATHS.UPLOADS}${documentId}.`
-    });
-    
-    for (const file of uploadedFiles) {
-      await file.delete();
+    if (useFirebase && bucket) {
+      // Firebase Storage
+      const docFile = bucket.file(`${FIREBASE_PATHS.DOCUMENTS}${documentId}.json`);
+      await docFile.delete();
+      
+      // Try to find and delete associated uploaded file
+      const [uploadedFiles] = await bucket.getFiles({
+        prefix: `${FIREBASE_PATHS.UPLOADS}${documentId}.`
+      });
+      
+      for (const file of uploadedFiles) {
+        await file.delete();
+      }
+      
+      console.log(`Document deleted from Firebase: ${documentId}`);
+      return { success: true };
+    } else {
+      // Local Storage Fallback
+      const jsonPath = path.join(LOCAL_STORAGE.DOCUMENTS, `${documentId}.json`);
+      
+      // Delete JSON metadata
+      try {
+        await fs.unlink(jsonPath);
+        console.log(`Deleted local document metadata: ${jsonPath}`);
+      } catch (err) {
+        if (err.code !== 'ENOENT') console.error('Error deleting local JSON:', err);
+      }
+      
+      // Delete uploaded file (try common extensions)
+      const uploadDir = LOCAL_STORAGE.UPLOADS;
+      const files = await fs.readdir(uploadDir);
+      
+      for (const file of files) {
+        if (file.startsWith(documentId)) {
+          await fs.unlink(path.join(uploadDir, file));
+          console.log(`Deleted local uploaded file: ${file}`);
+        }
+      }
+      
+      return { success: true };
     }
-    
-    console.log(`Document deleted from Firebase: ${documentId}`);
-    return { success: true };
   } catch (error) {
-    console.error('Error deleting document from Firebase:', error);
+    console.error('Error deleting document:', error);
     return { success: false, error: error.message };
   }
 };

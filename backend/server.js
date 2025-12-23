@@ -4,6 +4,7 @@ import uploadRoutes from "./routes/upload.js";
 import validationRoutes from "./routes/validation.js";
 import documentRoutes from "./routes/documents.js";
 import aiRoutes from "./routes/ai.js";
+import webRoutes from "./routes/web.js";
 import { initializeFirebaseStorage } from "./services/firebaseStorageService.js";
 import { initializeDocumentCache } from "./controllers/documentController.js";
 
@@ -24,7 +25,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'Backend is running',
-    openaiConfigured: !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith('sk-'),
+    googleAIConfigured: !!process.env.GOOGLE_API_KEY,
     firebaseConfigured: !!process.env.FIREBASE_PROJECT_ID
   });
 });
@@ -39,11 +40,11 @@ app.get('/api/test', (req, res) => {
   });
 });
 
-// Test OpenAI endpoint
-app.get('/api/test-openai', async (req, res) => {
+// Test AI endpoint
+app.get('/api/test-ai', async (req, res) => {
   try {
     const { processWithAI } = await import('./services/aiService.js');
-    const testResult = await processWithAI('This is a test document to verify OpenAI integration is working correctly.', {
+    const testResult = await processWithAI('This is a test document to verify Google AI integration is working correctly.', {
       summarize: true,
       extractTopics: false,
       findEntities: false,
@@ -51,7 +52,7 @@ app.get('/api/test-openai', async (req, res) => {
     });
     res.json({
       success: true,
-      message: 'OpenAI is working!',
+      message: 'AI is working!',
       isMockResponse: testResult.summary.includes('configure your API key'),
       summary: testResult.summary
     });
@@ -68,12 +69,14 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/validation", validationRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/web", webRoutes);
 
 // Start server with initialization
 const startServer = async () => {
   await initializeApp();
   
-  const PORT = process.env.PORT || 5000;
+  // Use port 3000 to avoid conflict with Firebase Emulator (5000)
+  const PORT = process.env.PORT || 3000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend running on http://localhost:${PORT}`);
     console.log("Available endpoints:");
@@ -86,7 +89,8 @@ const startServer = async () => {
     console.log("  GET  /api/documents/:id - Get specific document");
     console.log("  POST /api/ai/ask - Ask AI questions about documents");
     console.log("  POST /api/ai/insights - Get AI insights about analysis");
-    console.log("\n� Firebase Storage Location: gs://try1-7d848.firebasestorage.app/TeachAI/");
+    console.log("  POST /api/web/analyze - Analyze a website");
+    console.log("\n Firebase Storage Location: gs://try1-7d848.firebasestorage.app/TeachAI/");
     console.log("  - TeachAI/documents/: Document metadata & AI analysis (JSON files)");
     console.log("  - TeachAI/uploads/: Original uploaded files");
     console.log("  - TeachAI/metadata/: Additional metadata storage");

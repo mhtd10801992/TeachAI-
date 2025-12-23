@@ -7,8 +7,8 @@ const getBaseURL = () => {
     // Use environment variable if set, otherwise use default production URL
     return import.meta.env.VITE_API_URL || 'https://teachai-api--try1-7d848.us-east4.hosted.app/api';
   }
-  // Development mode - use localhost
-  return 'http://localhost:5000/api';
+  // Development mode - use relative path so Vite proxy can handle it
+  return '/api';
 };
 
 const API = axios.create({

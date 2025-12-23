@@ -1,49 +1,88 @@
-import OpenAI from 'openai';
+
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Initialize OpenAI only if we have a valid API key
-let openai = null;
-const apiKey = process.env.OPENAI_API_KEY;
-if (apiKey && apiKey !== 'sk-placeholder_get_real_key_from_openai_platform' && apiKey !== 'your_openai_api_key_here') {
+// Load environment variables strictly from the root of backend
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// Initialize Google AI only if we have a valid API key
+let googleAI = null;
+const apiKey = process.env.GOOGLE_API_KEY;
+
+console.log('🔑 aiController API Key check:', {
+  exists: !!apiKey,
+  length: apiKey?.length,
+  first10: apiKey?.substring(0, 10)
+});
+
+if (apiKey) {
   try {
-    openai = new OpenAI({
-      apiKey: apiKey
-    });
-    console.log('✅ OpenAI API initialized in aiController');
+    googleAI = new GoogleGenerativeAI(apiKey);
+    console.log('✅ Google AI API initialized in aiController');
   } catch (error) {
-    console.log('⚠️  OpenAI initialization failed:', error.message);
+    console.log('⚠️  Google AI initialization failed:', error.message);
   }
 } else {
-  console.log('⚠️  OpenAI API key not configured. AI features will use mock responses.');
+  console.log('⚠️  Google AI API key not configured. AI features will use mock responses.');
+}
+
+async function runGoogleAI(prompt, modelName = "gemini-2.0-flash") {
+    // Lazy initialization check
+    if (!googleAI && process.env.GOOGLE_API_KEY) {
+        googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    }
+
+    if (!googleAI) {
+        throw new Error("Google AI API not initialized");
+    }
+    try {
+        console.log(`🤖 Calling Gemini (${modelName})...`);
+        const model = googleAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("❌ runGoogleAI Error:", error);
+        throw error;
+    }
 }
 
 export const aiController = {
   async askQuestion(req, res) {
     try {
+      console.log("📝 Received askQuestion request");
       const { question, context } = req.body;
 
       if (!question) {
         return res.status(400).json({ error: 'Question is required' });
       }
 
-      // If no OpenAI API key, return mock responses
-      if (!openai) {
+      // Check Google AI availability
+      if (!googleAI && process.env.GOOGLE_API_KEY) {
+          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      }
+
+      // If no Google AI API key, return mock responses
+      if (!googleAI) {
+          console.log("⚠️ No Google AI instance, returning mock.");
         const mockResponses = {
           'what is the main topic': 'The main topic of this document appears to be about project management and workflow optimization.',
           'summarize key points': 'Key points include: 1) Process improvement initiatives, 2) Team collaboration strategies, 3) Timeline management, 4) Resource allocation.',
           'what are the important dates': 'Important dates mentioned: Project start (Jan 15), Milestone 1 (Feb 28), Final deadline (June 30).',
           'who are the stakeholders': 'Key stakeholders include: Project Manager John Smith, Development Team Lead Sarah Johnson, Client Representative Mike Davis.',
           'what actions are required': 'Key actions include: 1) Complete initial planning phase, 2) Set up team meetings, 3) Define project milestones.',
-          'any missing information': 'To get real AI responses, please configure your OpenAI API key in the .env file.'
+          'any missing information': 'To get real AI responses, please configure your Google AI API key in the .env file.'
         };
         
-        let response = 'I can provide more specific information if you ask about: main topics, key points, important dates, stakeholders, or any specific aspect of the document. (Note: Configure OpenAI API key for real AI responses)';
+        let response = 'I can provide more specific information if you ask about: main topics, key points, important dates, stakeholders, or any specific aspect of the document. (Note: Configure Google AI API key for real AI responses)';
         
         for (const [key, value] of Object.entries(mockResponses)) {
           if (question.toLowerCase().includes(key.split(' ').slice(0, 3).join(' '))) {
-            response = value + '\n\n(Mock response - Configure OpenAI API key for real AI analysis)';
+            response = value + '\n\n(Mock response - Configure Google AI API key for real AI analysis)';
             break;
           }
         }
@@ -53,107 +92,54 @@ export const aiController = {
         
         return res.json({
           answer: response,
-          usage: { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 },
           mock: true
         });
       }
 
-      // Build context for the AI based on mode
+      // Build context for the AI
       let contextText = '';
-      let systemPrompt = "You are a helpful AI assistant that analyzes documents and answers questions about their content. Be concise, accurate, and helpful in your responses.";
-      
-      if (context.mode === 'all' && context.documents) {
-        // Multi-document search mode
-        contextText = `You have access to ${context.documentCount} documents. Here's the information:\n\n`;
-        
-        context.documents.forEach((doc, index) => {
-          contextText += `Document ${index + 1}: ${doc.filename}\n`;
-          if (doc.summary) {
-            contextText += `Summary: ${doc.summary}\n`;
-          }
-          if (doc.topics) {
-            const topicsStr = Array.isArray(doc.topics) ? doc.topics.join(', ') : doc.topics;
-            contextText += `Topics: ${topicsStr}\n`;
-          }
-          contextText += `\n`;
-        });
-        
-        systemPrompt = "You are a helpful AI assistant with access to multiple documents. When answering questions, search across all provided documents to find the most relevant information. Reference specific documents by name when providing answers.";
-      } else if (context.mode === 'single') {
-        // Single document mode
-        contextText = `Document: ${context.filename}\n`;
-        
-        if (context.summary) {
-          contextText += `Summary: ${context.summary}\n`;
-        }
-        
-        if (context.topics && context.topics.length > 0) {
-          const topicsStr = Array.isArray(context.topics) ? context.topics.join(', ') : context.topics;
-          contextText += `Topics: ${topicsStr}\n`;
-        }
-        
-        if (context.entities && context.entities.length > 0) {
-          const entityText = context.entities.map(e => {
-            if (typeof e === 'object' && e.name) {
-              return `${e.name} (${e.type})`;
+      if (context) {
+          if (context.mode === 'all' && context.documents) {
+            contextText = `You have access to ${context.documentCount} documents. Here's the information:\n\n`;
+            context.documents.forEach((doc, index) => {
+              contextText += `Document ${index + 1}: ${doc.filename}\n`;
+              if (doc.summary) {
+                contextText += `Summary: ${doc.summary}\n`;
+              }
+              if (doc.topics) {
+                const topicsStr = Array.isArray(doc.topics) ? doc.topics.join(', ') : doc.topics;
+                contextText += `Topics: ${topicsStr}\n`;
+              }
+              contextText += `\n`;
+            });
+          } else if (context.mode === 'single') {
+            contextText = `Document: ${context.filename}\n`;
+            if (context.summary) {
+              contextText += `Summary: ${context.summary}\n`;
             }
-            return e;
-          }).join(', ');
-          contextText += `Entities: ${entityText}\n`;
-        }
-        
-        if (context.sentiment) {
-          contextText += `Sentiment: ${context.sentiment.value} (${Math.round(context.sentiment.confidence * 100)}% confidence)\n`;
-        }
+            if (context.topics && context.topics.length > 0) {
+              const topicsStr = Array.isArray(context.topics) ? context.topics.join(', ') : context.topics;
+              contextText += `Topics: ${topicsStr}\n`;
+            }
+          }
       } else {
-        // General mode - no specific document
-        contextText = `General question without specific document context.\n`;
+          console.warn("⚠️ No context provided in request");
       }
 
-      // Create the prompt for OpenAI
-      const prompt = `You are an AI assistant helping analyze documents. Based on the following information, please answer the user's question accurately and helpfully.
+      const prompt = `Based on the following information, please answer the user's question accurately and helpfully.\n\n${contextText}\n\nUser Question: ${question}`;
 
-${contextText}
-
-User Question: ${question}
-
-Please provide a clear, concise, and helpful answer based on the information provided. If the information isn't sufficient to answer the question, let the user know what additional details might be needed.`;
-
-      // Call OpenAI API
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        max_tokens: 600,
-        temperature: 0.7
-      });
-
-      const answer = completion.choices[0].message.content;
+      console.log("🚀 Sending prompt to Google AI...");
+      const answer = await runGoogleAI(prompt);
+      console.log("✅ Received answer from Google AI");
 
       res.json({
         answer: answer,
-        usage: completion.usage,
         mock: false
       });
 
     } catch (error) {
-      console.error('OpenAI API Error:', error);
-      
-      if (error.status === 401) {
-        res.status(401).json({ error: 'Invalid OpenAI API key. Please check your configuration.' });
-      } else if (error.status === 429) {
-        res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
-      } else {
-        res.status(500).json({ error: 'Failed to process AI request' });
-      }
+      console.error('❌ Google AI API Error in askQuestion:', error);
+      res.status(500).json({ error: 'Failed to process AI request', details: error.message });
     }
   },
 
@@ -161,189 +147,94 @@ Please provide a clear, concise, and helpful answer based on the information pro
     try {
       const { analysis } = req.body;
 
-      // If no OpenAI API key, return mock insights
-      if (!openai) {
-        const mockInsights = `Analysis Quality Assessment:
+      // Lazy check
+      if (!googleAI && process.env.GOOGLE_API_KEY) {
+        googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      }
 
-1. **Content Completeness**: The document analysis appears comprehensive with identified topics and entities.
-
-2. **Analysis Accuracy**: Current confidence levels suggest good automated processing, but human review is recommended.
-
-3. **Missing Information**: Consider adding more specific domain terminology and checking for overlooked key concepts.
-
-4. **Suggested Improvements**: 
-   - Review entity classifications for accuracy
-   - Validate topic relevance to document content
-   - Confirm sentiment analysis matches document tone
-
-5. **Potential Issues**: Some technical terms may need manual verification for proper categorization.
-
-(Mock response - Configure OpenAI API key for real AI insights)`;
-
+      if (!googleAI) {
+        const mockInsights = `Analysis Quality Assessment:\n\n1. **Content Completeness**: The document analysis appears comprehensive...\n\n(Mock response - Configure Google AI API key for real AI insights)`;
         await new Promise(resolve => setTimeout(resolve, 800));
-        
         return res.json({
           insights: mockInsights,
-          usage: { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 },
           mock: true
         });
       }
 
-      const prompt = `Analyze this document analysis and provide 3-5 key insights or suggestions for improvement:
-
-Summary: ${analysis.summary?.text || 'No summary provided'}
-Topics: ${analysis.topics?.items?.join(', ') || 'No topics identified'}
-Entities: ${analysis.entities?.items?.map(e => `${e.name} (${e.type})`).join(', ') || 'No entities identified'}
-Sentiment: ${analysis.sentiment?.value || 'Unknown'} (${Math.round((analysis.sentiment?.confidence || 0) * 100)}% confidence)
-
-Please provide actionable insights about:
-1. Content completeness
-2. Analysis accuracy
-3. Missing information
-4. Suggested improvements
-5. Potential issues or concerns`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert document analyst. Provide concise, actionable insights about document analysis quality and completeness."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        max_tokens: 400,
-        temperature: 0.7
-      });
-
-      const insights = completion.choices[0].message.content;
-
+      const prompt = `Analyze this document analysis and provide 3-5 key insights or suggestions for improvement:\n\nSummary: ${analysis.summary?.text || 'No summary'}\nTopics: ${analysis.topics?.items?.join(', ') || 'No topics'}\n\nPlease provide actionable insights.`;
+      const insights = await runGoogleAI(prompt);
       res.json({
         insights: insights,
-        usage: completion.usage,
         mock: false
       });
 
     } catch (error) {
-      console.error('OpenAI Insights Error:', error);
+      console.error('Google AI Insights Error:', error);
       res.status(500).json({ error: 'Failed to generate insights' });
     }
   },
 
   async clarify(req, res) {
     try {
-      const { documentId, text, context } = req.body;
+      const { text, context } = req.body;
 
       if (!text) {
         return res.status(400).json({ error: 'Text is required for clarification' });
       }
 
-      if (!openai) {
+      if (!googleAI && process.env.GOOGLE_API_KEY) {
+        googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      }
+
+      if (!googleAI) {
         return res.json({
-          clarification: `This text requires clarification: "${text}". The system suggests: Verify this information for accuracy and add supporting context if needed. (Configure OpenAI API key for detailed AI clarification)`,
-          suggestions: [
-            'Verify the accuracy of this information',
-            'Add supporting evidence or sources',
-            'Consider alternative interpretations',
-            'Check for missing context'
-          ],
+          clarification: `This text requires clarification: \"${text}\". (Configure Google AI API key for detailed AI clarification)`,
+          suggestions: ['Verify accuracy', 'Add sources'],
           mock: true
         });
       }
 
-      const prompt = `As an AI document analyst, I need clarification about the following text from a document:
-
-Text: "${text}"
-Context: ${context || 'No additional context provided'}
-
-Please provide:
-1. Why this text might need clarification or validation
-2. Possible alternative interpretations
-3. What additional information would help clarify this
-4. Specific suggestions for improvement
-5. Confidence level assessment`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert document analyst who helps identify ambiguities and provides clarifying suggestions."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        max_tokens: 300,
-        temperature: 0.7
-      });
-
-      const clarification = completion.choices[0].message.content;
-
+      const prompt = `As an AI document analyst, I need clarification about the following text from a document:\n\nText: \"${text}\"\nContext: ${context || 'None'}\n\nPlease provide: 1. Why this might need clarification. 2. Possible alternative interpretations. 3. What additional information would help.`;
+      const clarification = await runGoogleAI(prompt);
       res.json({
         clarification: clarification,
-        usage: completion.usage,
         mock: false
       });
 
     } catch (error) {
-      console.error('OpenAI Clarification Error:', error);
+      console.error('Google AI Clarification Error:', error);
       res.status(500).json({ error: 'Failed to generate clarification' });
     }
   },
 
   async explain(req, res) {
     try {
-      const { documentId, section } = req.body;
+      const { section } = req.body;
 
       if (!section) {
         return res.status(400).json({ error: 'Section is required for explanation' });
       }
 
-      if (!openai) {
+      if (!googleAI && process.env.GOOGLE_API_KEY) {
+        googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      }
+
+      if (!googleAI) {
         return res.json({
-          explanation: `This section explains the ${section} of the document. It was generated through AI analysis of the document content. (Configure OpenAI API key for detailed explanations)`,
+          explanation: `This section explains the ${section}. (Configure Google AI API key for detailed explanations)`,
           mock: true
         });
       }
 
-      const prompt = `Explain how the AI analyzed and generated the ${section} section for this document. Include:
-1. What analysis techniques were used
-2. Why this information is important
-3. How the AI determined confidence levels
-4. What users should verify or validate
-5. How to improve the analysis`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are an AI systems expert who explains how document analysis AI works in simple, understandable terms."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        max_tokens: 250,
-        temperature: 0.7
-      });
-
-      const explanation = completion.choices[0].message.content;
-
+      const prompt = `Explain how the AI analyzed and generated the ${section} section for this document. Include: 1. Analysis techniques used. 2. Why this information is important. 3. How to improve the analysis.`;
+      const explanation = await runGoogleAI(prompt);
       res.json({
         explanation: explanation,
-        usage: completion.usage,
         mock: false
       });
 
     } catch (error) {
-      console.error('OpenAI Explanation Error:', error);
+      console.error('Google AI Explanation Error:', error);
       res.status(500).json({ error: 'Failed to generate explanation' });
     }
   }

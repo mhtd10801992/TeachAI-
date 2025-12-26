@@ -47,8 +47,8 @@ try {
 
 if (useFirebase) {
   try {
-    bucket = getStorage().bucket();
-    console.log('✅ Firebase Storage bucket initialized');
+    bucket = getStorage().bucket(firebaseConfig.storageBucket);
+    console.log(`✅ Firebase Storage bucket initialized: ${bucket.name}`);
   } catch (error) {
     console.error('❌ Firebase Storage initialization failed:', error.message);
     useFirebase = false;
@@ -200,8 +200,7 @@ export const loadDocumentsFromFirebase = async () => {
     if (useFirebase && bucket) {
       // Firebase Storage
       const [files] = await bucket.getFiles({
-        prefix: FIREBASE_PATHS.DOCUMENTS,
-        delimiter: '/'
+        prefix: FIREBASE_PATHS.DOCUMENTS
       });
       
       const documents = [];
@@ -401,7 +400,7 @@ export const initializeFirebaseStorage = async () => {
         }
       });
       
-      console.log('✅ Firebase Storage initialized at gs://try1-7d848.firebasestorage.app/TeachAI');
+      console.log(`✅ Firebase Storage initialized at gs://${bucket.name}/TeachAI`);
       return true;
     } else {
       // Local Storage initialization

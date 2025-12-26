@@ -1,5 +1,9 @@
+// WORKAROUND: Manually set the API key
+process.env.GOOGLE_API_KEY = "AIzaSyDYqI-0cnhNxhtMZ7G2tWmqymN6YCw9Qhg";
+
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
 import uploadRoutes from "./routes/upload.js";
 import validationRoutes from "./routes/validation.js";
 import documentRoutes from "./routes/documents.js";
@@ -8,11 +12,12 @@ import webRoutes from "./routes/web.js";
 import { initializeFirebaseStorage } from "./services/firebaseStorageService.js";
 import { initializeDocumentCache } from "./controllers/documentController.js";
 
+dotenv.config();
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialize storage systems
 const initializeApp = async () => {
   console.log('🔥 Initializing Firebase Storage...');
   await initializeFirebaseStorage();
@@ -20,7 +25,6 @@ const initializeApp = async () => {
   console.log('✅ Firebase Storage systems initialized');
 };
 
-// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -30,70 +34,18 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Test endpoint for documents
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'API is working',
-    time: new Date().toISOString(),
-    endpoints: ['/api/documents', '/api/upload', '/api/ai/ask']
-  });
-});
-
-// Test AI endpoint
-app.get('/api/test-ai', async (req, res) => {
-  try {
-    const { processWithAI } = await import('./services/aiService.js');
-    const testResult = await processWithAI('This is a test document to verify Google AI integration is working correctly.', {
-      summarize: true,
-      extractTopics: false,
-      findEntities: false,
-      analyzeSentiment: false
-    });
-    res.json({
-      success: true,
-      message: 'AI is working!',
-      isMockResponse: testResult.summary.includes('configure your API key'),
-      summary: testResult.summary
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      details: error.stack
-    });
-  }
-});
-
 app.use("/api/upload", uploadRoutes);
 app.use("/api/validation", validationRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/web", webRoutes);
 
-// Start server with initialization
 const startServer = async () => {
   await initializeApp();
   
-  // Use port 3000 to avoid conflict with Firebase Emulator (5000)
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend running on http://localhost:${PORT}`);
-    console.log("Available endpoints:");
-    console.log("  POST /api/upload - Upload documents");
-    console.log("  GET  /api/validation/pending - Get pending documents");
-    console.log("  GET  /api/validation/questions - Get question queue");
-    console.log("  GET  /api/documents - Get all documents");
-    console.log("  GET  /api/documents/search - Search documents");
-    console.log("  GET  /api/documents/stats - Get document statistics");
-    console.log("  GET  /api/documents/:id - Get specific document");
-    console.log("  POST /api/ai/ask - Ask AI questions about documents");
-    console.log("  POST /api/ai/insights - Get AI insights about analysis");
-    console.log("  POST /api/web/analyze - Analyze a website");
-    console.log("\n Firebase Storage Location: gs://try1-7d848.firebasestorage.app/TeachAI/");
-    console.log("  - TeachAI/documents/: Document metadata & AI analysis (JSON files)");
-    console.log("  - TeachAI/uploads/: Original uploaded files");
-    console.log("  - TeachAI/metadata/: Additional metadata storage");
   });
 };
 

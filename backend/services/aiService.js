@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Check if Google AI API key is configured
-const apiKey = process.env.GOOGLE_API_KEY;
+const apiKey = process.env.GOOGLE_AI_API_KEY;
 console.log('🔑 Google AI API Key check:', {
   exists: !!apiKey,
   length: apiKey?.length,
@@ -31,8 +31,8 @@ if (apiKey) {
 
 async function runGoogleAI(prompt, modelName = "gemini-2.0-flash") {
   if (!googleAI) {
-      if (process.env.GOOGLE_API_KEY) {
-          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      if (process.env.GOOGLE_AI_API_KEY) {
+          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
       } else {
           throw new Error("Google AI API not initialized");
       }
@@ -48,8 +48,8 @@ export const processWithAI = async (text, options = {}) => {
   
   try {
     if (!googleAI) {
-      if (process.env.GOOGLE_API_KEY) {
-          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+      if (process.env.GOOGLE_AI_API_KEY) {
+          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
       } else {
           throw new Error('Google AI API Key is missing! Please check .env file.');
       }

@@ -4,8 +4,8 @@ import axios from "axios";
 const getBaseURL = () => {
   // Check if running in production (deployed)
   if (import.meta.env.PROD) {
-    // Use environment variable if set, otherwise use default production URL
-    return import.meta.env.VITE_API_URL || 'https://teachai-api--try1-7d848.us-east4.hosted.app/api';
+    // Hardcode the production URL to ensure the correct backend is used
+    return 'https://teachai-backend-632927777196.us-central1.run.app/api';
   }
   // Development mode - use relative path so Vite proxy can handle it
   return '/api';

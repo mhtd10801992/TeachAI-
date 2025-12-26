@@ -9,6 +9,8 @@ runConfig:
 env:
   - variable: OPENAI_API_KEY
     secret: openai-api-key
+  - variable: GOOGLE_AI_API_KEY
+    secret: google-ai-api-key
   - variable: FIREBASE_PROJECT_ID
     value: try1-7d848
   - variable: FIREBASE_STORAGE_BUCKET

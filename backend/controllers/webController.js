@@ -21,15 +21,17 @@ export const webController = {
 
       // If requested, save this analysis as a document in the history
       if (saveToHistory) {
-          const docId = `web_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const docId = `web_${Date.now()}`;
           
           const documentData = {
               success: true,
               status: 'processed',
               document: {
                   id: docId,
-                  filename: analysis.title || url,
-                  size: analysis.textContent?.length || 0,
+                  // Use data from the new fileData object returned by the service
+                  filename: analysis.fileData.filename,
+                  size: analysis.fileData.size,
+                  storagePath: analysis.fileData.storagePath, // <-- The crucial new field
                   uploadDate: new Date().toISOString(),
                   type: 'web_analysis',
                   url: url,
@@ -53,7 +55,6 @@ export const webController = {
                           value: 'neutral',
                           confidence: 0.8
                       },
-                      // Store the rich web-specific data
                       insights: [], 
                       sections: [],
                       validationPoints: [],
@@ -61,8 +62,6 @@ export const webController = {
                           fullText: analysis.textContent, 
                           highlights: [] 
                       },
-                      
-                      // Custom fields for web analysis
                       webAnalysis: {
                           imageAnalysis: analysis.imageAnalysis,
                           scholarlyData: analysis.scholarlyData,
@@ -77,7 +76,6 @@ export const webController = {
           await saveDocument(documentData);
           console.log(`✅ Saved web analysis to history: ${docId}`);
           
-          // Return the saved document structure so frontend can use it if needed
           return res.json({
               ...analysis,
               savedDocumentId: docId,

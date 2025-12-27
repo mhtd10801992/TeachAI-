@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://teachai-backend-632927777196.us-central1.run.app',
+        target: 'http://localhost:4000',
         changeOrigin: true,
         secure: false,
       }

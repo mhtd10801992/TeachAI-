@@ -1,4 +1,4 @@
-# Comprehensive Document Analysis System - Implementation Guide
+Invoke-RestMethod -Uri "http://localhost:4000/api/ai/ask" -Method Post -Headers @{ "Content-Type" = "application/json" } -Body '{ "question": "What is AI?", "context": { "mode": "general" } }'# Comprehensive Document Analysis System - Implementation Guide
 
 ## 🎯 Overview
 

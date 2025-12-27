@@ -1,56 +1,19 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-let googleAI = null;
-
-async function runGoogleAI(prompt, modelName = "gemini-pro") {
-    if (!googleAI) {
-        const apiKey = process.env.GOOGLE_API_KEY;
-        if (apiKey) {
-            try {
-                googleAI = new GoogleGenerativeAI(apiKey);
-                console.log('✅ Google AI API initialized in runGoogleAI');
-            } catch (error) {
-                console.log('⚠️  Google AI initialization failed:', error.message);
-                throw new Error("Google AI API not initialized");
-            }
-        } else {
-            console.log('⚠️ [runGoogleAI] GOOGLE_API_KEY is not.env');
-            throw new Error("AI is not configured. API key is missing.");
-        }
-    }
-
-    try {
-        const model = googleAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
-        return result.response.text();
-    } catch (error) {
-        console.error("❌ runGoogleAI Error:", error);
-        throw error;
-    }
-}
+import { processWithAI } from "../services/aiService.js";
 
 export const aiController = {
   async testAI(req, res) {
     try {
       const prompt = "Say 'ok' if you are working.";
-      const result = await runGoogleAI(prompt, "gemini-pro");
-      
-      const isSuccess = result.toLowerCase().includes('ok');
-
+      const aiResult = await processWithAI(prompt, { summarize: false });
+      const isSuccess = aiResult && aiResult.summary?.toLowerCase().includes('ok');
       res.json({
         success: isSuccess,
         message: isSuccess ? "AI is working!" : "AI test failed.",
         isMockResponse: false,
-        details: result
+        details: aiResult
       });
     } catch (error) {
-        if(error.message === "AI is not configured. API key is missing."){
-            return res.status(401).json({
-              success: false,
-              message: "AI is not configured. API key is missing.",
-              isMockResponse: true
-            });
-        }
       res.status(500).json({
         success: false,
         message: "AI test endpoint failed.",
@@ -59,45 +22,48 @@ export const aiController = {
     }
   },
   
-  async listModels(req, res) {
-    try {
-        if (!googleAI) {
-            const apiKey = process.env.GOOGLE_API_KEY;
-            if (apiKey) {
-                googleAI = new GoogleGenerativeAI(apiKey);
-            } else {
-                return res.status(401).json({
-                    success: false,
-                    message: "AI is not configured. API key is missing."
-                });
-            }
-        }
-        
-        const models = await googleAI.getGenerativeModel({ model: "gemini-pro" }).listModels();
-        
-        res.json({
-            success: true,
-            models: models.map(m => m.name)
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: "Failed to list AI models.",
-            error: error.message
-        });
-    }
-  },
+    async listModels(req, res) {
+    // OpenAI does not support listing models via API key, so return static info
+    res.json({
+      success: true,
+      models: ["gpt-3.5-turbo", "gpt-4", "text-embedding-ada-002"]
+    });
+    },
 
   async askQuestion(req, res) {
-    // ... existing function
+    try {
+      const { text, options } = req.body;
+      const aiResult = await processWithAI(text, options || {});
+      res.json({ success: true, result: aiResult });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   },
   async getInsights(req, res) {
-    // ... existing function
+    try {
+      const { text } = req.body;
+      const aiResult = await processWithAI(text, { extractKeyInsights: true });
+      res.json({ success: true, insights: aiResult });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   },
   async clarify(req, res) {
-    // ... existing function
+    try {
+      const { text } = req.body;
+      const aiResult = await processWithAI(text, { clarify: true });
+      res.json({ success: true, clarification: aiResult });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   },
   async explain(req, res) {
-    // ... existing function
+    try {
+      const { text } = req.body;
+      const aiResult = await processWithAI(text, { explain: true });
+      res.json({ success: true, explanation: aiResult });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   }
 };

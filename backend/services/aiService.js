@@ -1,137 +1,55 @@
-// AI Service - Google AI Integration
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+// AI Service - OpenAI Integration
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Load environment variables from the root of backend
-dotenv.config({ path: path.join(__dirname, '../.env') });
-
-// Check if Google AI API key is configured
-const apiKey = process.env.GOOGLE_AI_API_KEY;
-console.log('🔑 Google AI API Key check:', {
-  exists: !!apiKey,
-  length: apiKey?.length,
-  first10: apiKey?.substring(0, 10)
-});
-
-let googleAI;
-if (apiKey) {
-  try {
-    googleAI = new GoogleGenerativeAI(apiKey);
-    console.log('✅ Google AI API initialized in aiService [VERIFIED LOADED]');
-  } catch (error) {
-    console.log('⚠️  Google AI initialization failed:', error.message);
-  }
-} else {
-  console.log('⚠️  Google AI API key not configured. Using mock responses.');
-}
-
-async function runGoogleAI(prompt, modelName = "gemini-2.0-flash") {
-  if (!googleAI) {
-      if (process.env.GOOGLE_AI_API_KEY) {
-          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-      } else {
-          throw new Error("Google AI API not initialized");
-      }
-  }
-  const model = googleAI.getGenerativeModel({ model: modelName });
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text();
-}
+import OpenAI from 'openai';
 
 export const processWithAI = async (text, options = {}) => {
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('Input text is required and must be a non-empty string.');
+  }
   const startTime = Date.now();
-  
   try {
-    if (!googleAI) {
-      if (process.env.GOOGLE_AI_API_KEY) {
-          googleAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-      } else {
-          throw new Error('Google AI API Key is missing! Please check .env file.');
-      }
-    }
-
-    console.log('🤖 Processing FULL document with comprehensive Google AI analysis...');
-
-    // 1. Comprehensive Summarization
-    const summary = options.summarize !== false ? await generateSummary(text) : null;
-    
-    // 2. Detailed Topic Extraction
-    const topics = options.extractTopics !== false ? await extractTopics(text) : [];
-    
+    // 1. Summarization
+    const summary = options.summarize ? await generateSummary(text) : null;
+    // 2. Topic Extraction
+    const topics = options.extractTopics ? await extractTopics(text) : [];
     // 3. Entity Recognition
     const entities = options.findEntities ? await findEntities(text) : [];
-    
     // 4. Sentiment Analysis
-    const sentiment = options.analyzeSentiment !== false ? await analyzeSentiment(text) : null;
-    
-    // 5. Key Insights & Findings
-    const insights = await extractKeyInsights(text);
-    
-    // 6. Section Breakdown
-    const sections = await analyzeSections(text);
-    
-    // 7. Validation Points
-    const validationPoints = await identifyValidationPoints(text, { summary, topics, entities });
-    
-    // 8. Full document preservation with highlights
-    const documentWithHighlights = await highlightDocument(text, validationPoints);
-    
-    // 9. Chunk text for vector storage
-    const chunks = chunkText(text, 1000);
-    
-    // 10. Generate embeddings
+    const sentiment = options.analyzeSentiment ? await analyzeSentiment(text) : null;
+    // 5. Chunk text for vector storage
+    const chunks = chunkText(text, 1000); // 1000 char chunks
+    // 6. Generate embeddings for each chunk
     const chunksWithEmbeddings = await Promise.all(
-      chunks.map(async (chunk, index) => ({
+      chunks.map(async (chunk) => ({
         text: chunk,
         embedding: await generateEmbedding(chunk),
-        index: index,
-        needsReview: validationPoints.some(vp => 
-          vp.location >= index * 1000 && vp.location < (index + 1) * 1000
-        )
       }))
     );
-    
     return {
       summary,
       topics,
       entities,
       sentiment,
-      insights,
-      sections,
-      validationPoints,
-      documentWithHighlights,
-      originalText: text,
       confidence: 0.95,
       chunks: chunksWithEmbeddings,
       processingTime: Date.now() - startTime
     };
-    
   } catch (error) {
-    console.error('❌ AI processing error DETAILED:', error);
-    // Return error details instead of mock response to debug
-    return {
-        summary: `I AM A DEBUG ERROR: ${error.message}`,
-        topics: [],
-        entities: [],
-        sentiment: 'error',
-        confidence: 0,
-        chunks: [],
-        processingTime: 0
-    };
+    console.error('AI processing error:', error);
+    throw error;
   }
 };
 
 const generateSummary = async (text) => {
-  console.log('📝 Generating comprehensive summary with Google AI...');
   try {
-    const prompt = `You are a professional document analyzer. Generate a comprehensive, detailed summary covering all major points, sections, and findings. Include: 1) Main theme/purpose, 2) Key findings/arguments, 3) Important details and data, 4) Conclusions. Be thorough and specific.\n\nDocument Text:\n${text.substring(0, 30000)}`; 
-    
-    return await runGoogleAI(prompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const prompt = `You are a professional document analyzer. Generate a comprehensive, detailed summary covering all major points, sections, and findings. Include: 1) Main theme/purpose, 2) Key findings/arguments, 3) Important details and data, 4) Conclusions. Be thorough and specific.\n\nDocument Text:\n${text.substring(0, 30000)}`;
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 512
+    });
+    return response.choices[0].message.content.trim();
   } catch (error) {
     console.error('❌ Summary generation failed:', error.message);
     throw error;
@@ -140,9 +58,14 @@ const generateSummary = async (text) => {
 
 const extractTopics = async (text) => {
   const prompt = `Extract 8-12 comprehensive topics/themes from this text covering all major sections and concepts. Return ONLY a JSON array of strings, no other text or formatting.\n\nText:\n${text.substring(0, 30000)}`;
-  
   try {
-    const content = await runGoogleAI(prompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 256
+    });
+    const content = response.choices[0].message.content;
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     const parsed = JSON.parse(jsonContent);
     return Array.isArray(parsed) ? parsed : [parsed];
@@ -154,9 +77,14 @@ const extractTopics = async (text) => {
 
 const findEntities = async (text) => {
   const prompt = `Extract named entities (people, organizations, locations) from this text. Return as JSON array of objects with 'name' and 'type' fields.\n\nText:\n${text.substring(0, 10000)}`;
-  
   try {
-    const content = await runGoogleAI(prompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 256
+    });
+    const content = response.choices[0].message.content;
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     return JSON.parse(jsonContent);
   } catch {
@@ -167,21 +95,29 @@ const findEntities = async (text) => {
 const analyzeSentiment = async (text) => {
   const prompt = `Analyze the sentiment of this text. Return one word: 'positive', 'negative', or 'neutral'.\n\nText:\n${text.substring(0, 5000)}`;
   try {
-      const content = await runGoogleAI(prompt);
-      return content.toLowerCase().trim();
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 10
+    });
+    return response.choices[0].message.content.toLowerCase().trim();
   } catch {
-      return 'neutral';
+    return 'neutral';
   }
 };
 
 const generateEmbedding = async (text) => {
   try {
-    const model = googleAI.getGenerativeModel({ model: "text-embedding-004" });
-    const result = await model.embedContent(text.substring(0, 2048)); 
-    return result.embedding.values;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.embeddings.create({
+      model: "text-embedding-ada-002",
+      input: text.substring(0, 2048)
+    });
+    return response.data[0].embedding;
   } catch (error) {
     console.error('Embedding generation error:', error.message);
-    return Array(768).fill(0); 
+    return Array(768).fill(0);
   }
 };
 
@@ -196,7 +132,13 @@ const chunkText = (text, maxLength) => {
 const extractKeyInsights = async (text) => {
   const prompt = `Extract 5-8 key insights, findings, or conclusions from this document. Focus on actionable information, important data points, and critical conclusions. Return as JSON array of objects with 'insight' and 'importance' (high/medium/low) fields.\n\nText:\n${text.substring(0, 30000)}`;
   try {
-    const content = await runGoogleAI(prompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 256
+    });
+    const content = response.choices[0].message.content;
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     return JSON.parse(jsonContent);
   } catch (error) {
@@ -208,7 +150,13 @@ const extractKeyInsights = async (text) => {
 const analyzeSections = async (text) => {
   const prompt = `Analyze the document structure and identify major sections. For each section, provide: 'title', 'summary' (brief), and 'keyPoints' (array). Return as JSON array.\n\nText:\n${text.substring(0, 30000)}`;
   try {
-    const content = await runGoogleAI(prompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 512
+    });
+    const content = response.choices[0].message.content;
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     return JSON.parse(jsonContent);
   } catch (error) {
@@ -218,29 +166,17 @@ const analyzeSections = async (text) => {
 };
 
 const identifyValidationPoints = async (text, analysis) => {
-  const prompt = `You are reviewing a document analysis. Identify parts that need human validation:
-1. Ambiguous or unclear statements
-2. Critical data/numbers that should be verified
-3. Conflicting information
-4. Important dates, names, or figures
-5. Technical terms needing clarification
-
-For each point, provide:
-- 'text': the exact text snippet (keep it short, 10-20 words)
-- 'reason': why it needs validation
-- 'suggestion': what to check or possible interpretations
-- 'priority': high/medium/low
-- 'location': approximate character position in document
-
-Return as JSON array of validation points.
-
-Document excerpt:\n${text.substring(0, 15000)}\n\nAnalysis Summary: ${analysis.summary}`;
-
+  const prompt = `You are reviewing a document analysis. Identify parts that need human validation:\n1. Ambiguous or unclear statements\n2. Critical data/numbers that should be verified\n3. Conflicting information\n4. Important dates, names, or figures\n5. Technical terms needing clarification\n\nFor each point, provide:\n- 'text': the exact text snippet (keep it short, 10-20 words)\n- 'reason': why it needs validation\n- 'suggestion': what to check or possible interpretations\n- 'priority': high/medium/low\n- 'location': approximate character position in document\n\nReturn as JSON array of validation points.\n\nDocument excerpt:\n${text.substring(0, 15000)}\n\nAnalysis Summary: ${analysis.summary}`;
   try {
-    const content = await runGoogleAI(prompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 512
+    });
+    const content = response.choices[0].message.content;
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     const validationPoints = JSON.parse(jsonContent);
-    
     return validationPoints.map(vp => ({
       ...vp,
       id: Math.random().toString(36).substr(2, 9),

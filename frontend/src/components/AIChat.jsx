@@ -90,15 +90,28 @@ export default function AIChat({ documents }) {
         };
       }
 
+
       const response = await API.post('/ai/ask', {
-        question: input,
-        context: context
+        text: input,
+        options: context
       });
 
+
+      const aiResult = response.data.result;
+      let aiContent;
+      if (typeof aiResult === 'string') {
+        aiContent = aiResult;
+      } else if (aiResult?.summary) {
+        aiContent = aiResult.summary;
+      } else if (aiResult) {
+        aiContent = <pre style={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(aiResult, null, 2)}</pre>;
+      } else {
+        aiContent = 'No answer returned.';
+      }
       const aiMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: response.data.answer,
+        content: aiContent,
         timestamp: new Date().toISOString(),
         usage: response.data.usage
       };

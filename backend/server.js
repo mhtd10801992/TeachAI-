@@ -1,9 +1,12 @@
-// WORKAROUND: Manually set the API key
-process.env.GOOGLE_API_KEY = "AIzaSyDYqI-0cnhNxhtMZ7G2tWmqymN6YCw9Qhg";
+
+
+
+
+import dotenv from "dotenv";
+dotenv.config();
 
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import uploadRoutes from "./routes/upload.js";
 import validationRoutes from "./routes/validation.js";
 import documentRoutes from "./routes/documents.js";
@@ -11,8 +14,6 @@ import aiRoutes from "./routes/ai.js";
 import webRoutes from "./routes/web.js";
 import { initializeFirebaseStorage } from "./services/firebaseStorageService.js";
 import { initializeDocumentCache } from "./controllers/documentController.js";
-
-dotenv.config();
 
 const app = express();
 app.use(cors());

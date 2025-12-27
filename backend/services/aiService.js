@@ -1,12 +1,21 @@
-// Extract actionable steps from a document
+// Extract actionable steps from a document, with industry-specific and cost-saving focus
 export const extractActionableSteps = async (text) => {
-  const prompt = `Extract all important, practical, and workable actions or steps that a user can take based on this document. Focus on clear, actionable instructions or recommendations. Return ONLY a JSON array of strings, no other text or formatting.\n\nDocument Text:\n${text.substring(0, 30000)}`;
+  const prompt = `You are an expert business analyst for the automobile industry. Carefully read the entire document and extract all important, practical, and workable actions, strategies, or recommendations that a user or company can implement. Focus especially on:
+- Cost-saving strategies
+- Operational efficiency improvements
+- Process optimizations
+- Any actionable steps relevant to the automobile industry
+- Any general business actions that can be applied
+
+For each action, be thorough and specific. If the document contains information that can be used for cost reduction, process improvement, or strategic advantage, include it as an actionable item. Return ONLY a JSON array of strings, no other text or formatting.
+
+Document Text:\n${text.substring(0, 30000)}`;
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 256
+      max_tokens: 512
     });
     const content = response.choices[0].message.content;
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();

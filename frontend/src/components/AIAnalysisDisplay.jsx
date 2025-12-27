@@ -1,8 +1,31 @@
 import React, { useState } from 'react';
+import API from '../api/api';
 import AnalysisEditor from './AnalysisEditor';
 
 export default function AIAnalysisDisplay({ response, onUpdateAnalysis }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [actionableSteps, setActionableSteps] = useState([]);
+  const [loadingActions, setLoadingActions] = useState(false);
+  const [errorActions, setErrorActions] = useState(null);
+  const handleFetchActionableSteps = async () => {
+    setLoadingActions(true);
+    setErrorActions(null);
+    setActionableSteps([]);
+    try {
+      const text = response.document?.text || response.document?.rawText || '';
+      if (!text) throw new Error('No document text available.');
+      const res = await API.post('/ai/actionable-steps', { text });
+      if (res.data && res.data.success) {
+        setActionableSteps(res.data.steps);
+      } else {
+        setErrorActions('No actionable steps found.');
+      }
+    } catch (err) {
+      setErrorActions('Failed to fetch actionable steps.');
+    } finally {
+      setLoadingActions(false);
+    }
+  };
 
   if (!response) return null;
 
@@ -233,52 +256,53 @@ export default function AIAnalysisDisplay({ response, onUpdateAnalysis }) {
         )}
       </div>
 
-      {/* Action Buttons */}
+      {/* Action Buttons & Actionable Steps */}
       <div style={{ 
         marginTop: '30px', 
         paddingTop: '20px',
         borderTop: '1px solid rgba(255, 255, 255, 0.1)',
         textAlign: 'center'
       }}>
-        {isValidated ? (
-          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-            <button 
-              onClick={handleEditClick}
-              className="btn btn-warning"
-            >
-              🔍 Review & Edit Analysis
-            </button>
-            <button className="btn btn-success">
-              ✅ Approve & Vectorize
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div style={{ marginBottom: '15px' }}>
-              <button className="btn btn-success" style={{ marginBottom: '10px' }}>
-                🎉 Document Successfully Processed!
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button 
-                onClick={handleEditClick}
-                className="btn btn-warning"
-              >
-                🔍 Review & Edit Analysis
-              </button>
-              <button className="btn btn-primary">
-                📚 View in Document History
-              </button>
-            </div>
-            <p style={{ 
-              color: 'var(--text-secondary)', 
-              fontSize: '14px', 
-              marginTop: '10px' 
-            }}>
-              Your document is now searchable and ready for AI-powered queries
-            </p>
+        <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginBottom: '15px' }}>
+          <button onClick={handleEditClick} className="btn btn-warning">
+            🔍 Review & Edit Analysis
+          </button>
+          <button className="btn btn-primary" onClick={handleFetchActionableSteps} disabled={loadingActions}>
+            🚗 Show Actionable Strategies
+          </button>
+        </div>
+        {loadingActions && <div style={{ color: '#818cf8', marginBottom: '10px' }}>Analyzing for actionable strategies...</div>}
+        {errorActions && <div style={{ color: '#ef4444', marginBottom: '10px' }}>{errorActions}</div>}
+        {actionableSteps.length > 0 && (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.08)',
+            border: '1px solid #10b98133',
+            borderRadius: '14px',
+            padding: '18px 24px',
+            margin: '0 auto 10px auto',
+            maxWidth: 600,
+            textAlign: 'left'
+          }}>
+            <h4 style={{ color: '#10b981', margin: '0 0 10px 0' }}>🚗 Actionable Strategies & Cost-Saving Steps</h4>
+            <ol style={{ margin: 0, paddingLeft: '22px' }}>
+              {actionableSteps.map((step, idx) => (
+                <li key={idx} style={{ marginBottom: '8px', color: '#047857', fontSize: '15px' }}>{step}</li>
+              ))}
+            </ol>
           </div>
         )}
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '10px' }}>
+          <button className="btn btn-primary">
+            📚 View in Document History
+          </button>
+        </div>
+        <p style={{ 
+          color: 'var(--text-secondary)', 
+          fontSize: '14px', 
+          marginTop: '10px' 
+        }}>
+          Your document is now searchable and ready for AI-powered queries
+        </p>
       </div>
     </div>
   );

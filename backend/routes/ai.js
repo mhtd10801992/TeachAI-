@@ -1,9 +1,11 @@
-// Extract actionable steps from a document
-router.post('/actionable-steps', aiController.actionableSteps);
+
 import express from 'express';
 import { aiController } from '../controllers/aiController.js';
 
 const router = express.Router();
+
+// Extract actionable steps from a document
+router.post('/actionable-steps', aiController.actionableSteps);
 
 // NEW: Test AI connection
 router.get('/test', aiController.testAI);

@@ -101,10 +101,30 @@ export default function AIChat({ documents }) {
       let aiContent;
       if (typeof aiResult === 'string') {
         aiContent = aiResult;
-      } else if (aiResult?.summary) {
-        aiContent = aiResult.summary;
       } else if (aiResult) {
-        aiContent = <pre style={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(aiResult, null, 2)}</pre>;
+        aiContent = (
+          <div>
+            <div style={{ marginBottom: '8px' }}>
+              <strong>Summary:</strong> {aiResult.summary || <em>No summary available.</em>}
+            </div>
+            {Array.isArray(aiResult.topics) && aiResult.topics.length > 0 && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Topics:</strong> {aiResult.topics.join(', ')}
+              </div>
+            )}
+            {Array.isArray(aiResult.entities) && aiResult.entities.length > 0 && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Entities:</strong> {aiResult.entities.map(e => e.name || e).join(', ')}
+              </div>
+            )}
+            {aiResult.sentiment && (
+              <div style={{ marginBottom: '8px' }}>
+                <strong>Sentiment:</strong> {aiResult.sentiment}
+              </div>
+            )}
+            {/* Hide embeddings/chunks for chat */}
+          </div>
+        );
       } else {
         aiContent = 'No answer returned.';
       }

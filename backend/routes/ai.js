@@ -4,6 +4,11 @@ import { aiController } from '../controllers/aiController.js';
 
 const router = express.Router();
 
+// Extract linked information as Mermaid code
+router.post('/mermaid-graph', aiController.mermaidGraph);
+// Extract factor list for DOE
+router.post('/doe-factors', aiController.doeFactors);
+
 // Extract actionable steps from a document
 router.post('/actionable-steps', aiController.actionableSteps);
 

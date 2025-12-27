@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import API from '../api/api';
+import Mermaid from 'mermaid-react';
 
 export default function AIChat({ documents }) {
   const [messages, setMessages] = useState([]);
@@ -11,6 +12,56 @@ export default function AIChat({ documents }) {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const messagesEndRef = useRef(null);
+
+  // Mermaid and DOE state
+  const [mermaidCode, setMermaidCode] = useState('');
+  const [mermaidLoading, setMermaidLoading] = useState(false);
+  const [mermaidError, setMermaidError] = useState(null);
+  const [doeFactors, setDoeFactors] = useState([]);
+  const [doeLoading, setDoeLoading] = useState(false);
+  const [doeError, setDoeError] = useState(null);
+
+  // Fetch Mermaid graph for selected document
+  const handleGenerateMermaid = async () => {
+    setMermaidLoading(true);
+    setMermaidError(null);
+    setMermaidCode('');
+    try {
+      const docText = (selectedDoc?.document?.text || selectedDoc?.text || '');
+      if (!docText) throw new Error('No document text available.');
+      const res = await API.post('/ai/mermaid-graph', { text: docText });
+      if (res.data && res.data.success) {
+        setMermaidCode(res.data.code);
+      } else {
+        setMermaidError('No Mermaid code generated.');
+      }
+    } catch (err) {
+      setMermaidError('Failed to generate Mermaid diagram.');
+    } finally {
+      setMermaidLoading(false);
+    }
+  };
+
+  // Fetch DOE factors for selected document
+  const handleGenerateDOE = async () => {
+    setDoeLoading(true);
+    setDoeError(null);
+    setDoeFactors([]);
+    try {
+      const docText = (selectedDoc?.document?.text || selectedDoc?.text || '');
+      if (!docText) throw new Error('No document text available.');
+      const res = await API.post('/ai/doe-factors', { text: docText });
+      if (res.data && res.data.success) {
+        setDoeFactors(res.data.factors);
+      } else {
+        setDoeError('No DOE factors found.');
+      }
+    } catch (err) {
+      setDoeError('Failed to extract DOE factors.');
+    } finally {
+      setDoeLoading(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -632,6 +683,64 @@ export default function AIChat({ documents }) {
           Press Enter to send • Shift+Enter for new line
         </p>
       </div>
+    </div>
+
+    {/* --- Mermaid & DOE Section Below Chat --- */}
+    <div style={{
+      margin: '40px auto 0 auto',
+      maxWidth: 800,
+      background: 'rgba(99, 102, 241, 0.07)',
+      border: '1px solid rgba(99, 102, 241, 0.15)',
+      borderRadius: '18px',
+      padding: '28px 32px',
+      boxShadow: '0 2px 12px 0 rgba(99,102,241,0.04)'
+    }}>
+      <h3 style={{ margin: '0 0 18px 0', color: '#6366f1' }}>🔗 Document Relationship & DOE Tools</h3>
+      <div style={{ display: 'flex', gap: '18px', marginBottom: '18px', flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={handleGenerateMermaid} disabled={!selectedDoc || mermaidLoading}>
+          {mermaidLoading ? 'Generating...' : 'Generate Mermaid Diagram'}
+        </button>
+        <button className="btn btn-primary" onClick={handleGenerateDOE} disabled={!selectedDoc || doeLoading}>
+          {doeLoading ? 'Extracting...' : 'Extract DOE Factor List'}
+        </button>
+      </div>
+      {/* Mermaid Output */}
+      {mermaidError && <div style={{ color: '#ef4444', marginBottom: '10px' }}>{mermaidError}</div>}
+      {mermaidCode && (
+        <div style={{ marginBottom: '18px' }}>
+          <h4 style={{ color: '#6366f1', margin: '0 0 8px 0' }}>Mermaid Diagram (Live)</h4>
+          <div style={{ background: '#fff', borderRadius: '10px', padding: '16px', marginBottom: '10px', overflowX: 'auto' }}>
+            <Mermaid chart={mermaidCode} />
+          </div>
+          <h4 style={{ color: '#6366f1', margin: '12px 0 8px 0' }}>Mermaid Diagram Code</h4>
+          <pre style={{ background: '#18181b', color: '#a5b4fc', padding: '16px', borderRadius: '10px', fontSize: '14px', overflowX: 'auto' }}>{mermaidCode}</pre>
+        </div>
+      )}
+      {/* DOE Output */}
+      {doeError && <div style={{ color: '#ef4444', marginBottom: '10px' }}>{doeError}</div>}
+      {doeFactors.length > 0 && (
+        <div>
+          <h4 style={{ color: '#6366f1', margin: '0 0 8px 0' }}>DOE Factor List</h4>
+          <table style={{ width: '100%', background: '#18181b', color: '#a5b4fc', borderRadius: '10px', fontSize: '14px', marginBottom: '10px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Name</th>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Levels</th>
+                <th style={{ textAlign: 'left', padding: '8px' }}>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doeFactors.map((factor, idx) => (
+                <tr key={idx}>
+                  <td style={{ padding: '8px' }}>{factor.name}</td>
+                  <td style={{ padding: '8px' }}>{Array.isArray(factor.levels) ? factor.levels.join(', ') : factor.levels}</td>
+                  <td style={{ padding: '8px' }}>{factor.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
     </div>
   );

@@ -1,6 +1,24 @@
-import { processWithAI, extractActionableSteps } from "../services/aiService.js";
+import { processWithAI, extractActionableSteps, extractMermaidGraph, extractDOEFactors } from "../services/aiService.js";
 
 export const aiController = {
+      async mermaidGraph(req, res) {
+        try {
+          const { text } = req.body;
+          const code = await extractMermaidGraph(text);
+          res.json({ success: true, code });
+        } catch (error) {
+          res.status(500).json({ success: false, message: error.message });
+        }
+      },
+      async doeFactors(req, res) {
+        try {
+          const { text } = req.body;
+          const factors = await extractDOEFactors(text);
+          res.json({ success: true, factors });
+        } catch (error) {
+          res.status(500).json({ success: false, message: error.message });
+        }
+      },
     async actionableSteps(req, res) {
       try {
         const { text } = req.body;

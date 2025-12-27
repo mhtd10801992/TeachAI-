@@ -1,3 +1,43 @@
+// Extract linked information as Mermaid code
+export const extractMermaidGraph = async (text) => {
+  const prompt = `Read the following document and extract all possible linked information, relationships, or dependencies as a node-link diagram. Output the result as a valid Mermaid 'graph TD' code block. Use clear, concise node names and show all relevant links.\n\nDocument Text:\n${text.substring(0, 30000)}\n\nReturn ONLY the Mermaid code, nothing else.`;
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 512
+    });
+    // Extract only the code block
+    const content = response.choices[0].message.content;
+    const match = content.match(/```mermaid([\s\S]*?)```/i);
+    if (match) return match[1].trim();
+    return content.trim();
+  } catch (e) {
+    console.error('Mermaid graph extraction error:', e.message);
+    return '';
+  }
+};
+
+// Extract factor list as a design of experiment
+export const extractDOEFactors = async (text) => {
+  const prompt = `Read the following document and extract all factors, variables, or parameters that could be used in a design of experiments (DOE) for process or product optimization. For each factor, provide its name, possible levels/values, and a brief description if available. Return ONLY a JSON array of objects: [{ name, levels, description }], no other text.\n\nDocument Text:\n${text.substring(0, 30000)}`;
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 512
+    });
+    const content = response.choices[0].message.content;
+    const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+    const parsed = JSON.parse(jsonContent);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch (e) {
+    console.error('DOE factor extraction error:', e.message);
+    return [];
+  }
+};
 // Extract actionable steps from a document, with industry-specific and cost-saving focus
 export const extractActionableSteps = async (text) => {
   const prompt = `You are an expert business analyst for the automobile industry. Carefully read the entire document and extract all important, practical, and workable actions, strategies, or recommendations that a user or company can implement. Focus especially on:

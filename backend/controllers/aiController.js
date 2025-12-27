@@ -59,6 +59,35 @@ export const aiController = {
     }
   },
   
+  async listModels(req, res) {
+    try {
+        if (!googleAI) {
+            const apiKey = process.env.GOOGLE_API_KEY;
+            if (apiKey) {
+                googleAI = new GoogleGenerativeAI(apiKey);
+            } else {
+                return res.status(401).json({
+                    success: false,
+                    message: "AI is not configured. API key is missing."
+                });
+            }
+        }
+        
+        const models = await googleAI.getGenerativeModel({ model: "gemini-pro" }).listModels();
+        
+        res.json({
+            success: true,
+            models: models.map(m => m.name)
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed to list AI models.",
+            error: error.message
+        });
+    }
+  },
+
   async askQuestion(req, res) {
     // ... existing function
   },

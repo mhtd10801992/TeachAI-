@@ -1,5 +1,6 @@
 
 import { saveDocument } from './documentController.js';
+import { analyzeWebUrl } from '../services/webScraperService.js';
 
 export const webController = {
   async analyzeUrl(req, res) {
@@ -12,7 +13,6 @@ export const webController = {
 
       console.log(`🌐 Request to analyze: ${url}`);
       
-      const { analyzeWebUrl } = await import('../services/webScraperService.js');
       const analysis = await analyzeWebUrl(url);
       
       if (analysis.mock && analysis.summary && analysis.summary.includes("Access Denied")) {

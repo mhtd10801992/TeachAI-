@@ -1,3 +1,22 @@
+// Extract actionable steps from a document
+export const extractActionableSteps = async (text) => {
+  const prompt = `Extract all important, practical, and workable actions or steps that a user can take based on this document. Focus on clear, actionable instructions or recommendations. Return ONLY a JSON array of strings, no other text or formatting.\n\nDocument Text:\n${text.substring(0, 30000)}`;
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 256
+    });
+    const content = response.choices[0].message.content;
+    const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+    const parsed = JSON.parse(jsonContent);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch (e) {
+    console.error('Actionable steps extraction error:', e.message);
+    return [];
+  }
+};
 // AI Service - OpenAI Integration
 
 import OpenAI from 'openai';

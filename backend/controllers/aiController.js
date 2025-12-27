@@ -1,3 +1,13 @@
+import { processWithAI, extractActionableSteps } from "../services/aiService.js";
+  async actionableSteps(req, res) {
+    try {
+      const { text } = req.body;
+      const steps = await extractActionableSteps(text);
+      res.json({ success: true, steps });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 
 import { processWithAI } from "../services/aiService.js";
 

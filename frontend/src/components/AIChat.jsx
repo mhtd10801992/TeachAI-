@@ -52,9 +52,9 @@ export default function AIChat({ documents }) {
     setInput('');
     setLoading(true);
 
+
     try {
       let context;
-      
       if (searchMode === 'all' && filteredDocuments && filteredDocuments.length > 0) {
         // Search across all documents (or filtered by category)
         context = {
@@ -68,7 +68,8 @@ export default function AIChat({ documents }) {
             topics: doc.document?.analysis?.topics?.items || doc.analysis?.topics?.items || [],
             entities: doc.document?.analysis?.entities?.items || doc.analysis?.entities?.items || [],
             category: doc.category
-          }))
+          })),
+          summarize: true
         };
       } else if (selectedDoc) {
         // Single document mode
@@ -79,17 +80,18 @@ export default function AIChat({ documents }) {
           summary: docData.analysis?.summary?.text,
           topics: docData.analysis?.topics?.items || [],
           entities: docData.analysis?.entities?.items || [],
-          sentiment: docData.analysis?.sentiment
+          sentiment: docData.analysis?.sentiment,
+          summarize: true
         };
       } else {
         // General query without document context
         context = {
           mode: 'general',
           filename: 'General Query',
-          summary: 'No specific document selected'
+          summary: 'No specific document selected',
+          summarize: true
         };
       }
-
 
       const response = await API.post('/ai/ask', {
         text: input,

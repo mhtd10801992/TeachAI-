@@ -1,3 +1,5 @@
+// Extract actionable steps from a document
+router.post('/actionable-steps', aiController.actionableSteps);
 import express from 'express';
 import { aiController } from '../controllers/aiController.js';
 

@@ -159,36 +159,48 @@ Document Text:\n${text.substring(0, 30000)}`;
 
 // Extract concepts and relationships in a strict knowledge-graph JSON schema
 export const extractConceptGraph = async (text) => {
-  const prompt = `You are building a precise knowledge graph from a technical or educational document.
+  const prompt = `You are an expert research analyst. Extract all meaningful concepts from the following text and return them in the JSON schema provided.
 
-Your task is to identify IMPORTANT CONCEPTS and their relationships, and return them in EXACTLY this JSON schema:
+Guidelines:
+- Use short, precise concept names.
+- Only include concepts that are meaningful and non-trivial.
+- Include definitions only if explicitly stated or strongly implied.
+- Include examples only if they appear in the text.
+- Use "related_to" for conceptual similarity.
+- Use "depends_on" for prerequisites or logical dependencies.
+- Use "contrasts_with" for opposing ideas.
+- Use "evidence" for data, citations, or arguments that support the concept.
+- Use "open_questions" for unresolved issues or future research directions.
+- Do NOT invent information.
+- Return ONLY valid JSON.
 
+JSON Schema:
 {
   "concepts": [
     {
       "name": "",
-      "type": "core" | "supporting" | "example" | "definition" | "method" | "metric" | "assumption" | "limitation",
+      "type": "core | supporting | example | definition | method | metric | assumption | limitation",
       "definition": "",
-      "examples": [""],
-      "related_to": [""],
-      "depends_on": [""],
-      "contrasts_with": [""],
-      "evidence": [""],
-      "open_questions": [""]
+      "examples": [],
+      "related_to": [],
+      "depends_on": [],
+      "contrasts_with": [],
+      "evidence": [],
+      "open_questions": []
     }
   ]
 }
 
-STRICT RULES:
-- Return ONLY valid JSON, nothing else (no prose, no markdown, no comments).
-- The top-level object MUST contain a single key "concepts" with an array value.
-- "type" MUST be one of: "core", "supporting", "example", "definition", "method", "metric", "assumption", "limitation".
-- All array fields (examples, related_to, depends_on, contrasts_with, evidence, open_questions) MUST be arrays of strings (may be empty, but MUST exist).
+IMPORTANT:
+- "type" must be one of: core, supporting, example, definition, method, metric, assumption, limitation
+- All array fields must be arrays of strings (may be empty)
+- Focus on the 10-25 most important concepts
+- Ensure all JSON is properly formatted with no trailing commas
 
-Focus first on the 10–25 most important concepts for learning the material.
+Text (truncated to first 30k characters):
+${text.substring(0, 30000)}
 
-Document Text (truncated to first 30k characters):
-${text.substring(0, 30000)}`;
+Return ONLY the JSON, no additional text or markdown.`;
 
   try {
     const content = await runChat(prompt, { maxTokens: 900 });
@@ -284,55 +296,71 @@ ${text.substring(0, 30000)}`;
 export const inferConceptRelationships = async (concepts, text = '') => {
   const safeConcepts = Array.isArray(concepts) ? concepts.slice(0, 40) : [];
 
-  const prompt = `You are building LAYER 3 — RELATIONSHIP BUILDING for a knowledge graph.
+  // Prepare concept list for prompt - only include essential fields
+  const conceptList = safeConcepts.map(c => ({
+    name: c.name,
+    type: c.type,
+    definition: c.definition || ''
+  }));
 
-You are given a list of concepts already extracted from a document.
-Your job is to infer EXPLICIT relationships between these concepts.
+  const prompt = `You are an expert in knowledge graph construction. Given the following list of concepts extracted from a document, infer additional relationships between them.
 
-Allowed relationship types:
-- "parent_child" (B is a more specific instance or sub-concept of A)
-- "cause_effect" (A causes, influences, or leads to B)
-- "example_of" (A is an example or instance of B)
-- "part_of" (A is a component, module, or sub-system within B)
-- "contradiction" (A conflicts with or challenges B)
-- "dependency" (B depends on A as a prerequisite, input, or requirement)
+Guidelines:
+- Identify parent-child relationships (hierarchical structure).
+- Identify cause-effect relationships (one concept leads to or influences another).
+- Identify example-of relationships (one concept is an instance or example of another).
+- Identify part-of relationships (one concept is a component of another).
+- Identify contradictions or contrasts (opposing or conflicting concepts).
+- Identify dependencies or prerequisites (one concept requires another).
+- Use "related_to" for general conceptual similarity.
+- Do NOT invent new concepts; only link existing ones from the list below.
+- Use the concept "name" field exactly as written for source and target.
+- Return ONLY valid JSON with no markdown, comments, or extra text.
 
-Return ONLY valid JSON in exactly this schema (no markdown, no comments):
+JSON Schema:
 {
   "relationships": [
     {
       "from": "Concept name A",
       "to": "Concept name B",
-      "type": "parent_child" | "cause_effect" | "example_of" | "part_of" | "contradiction" | "dependency",
-      "description": "Short natural language explanation of the relationship.",
-      "evidence": "Short quote or reference phrase from the document, if available."
+      "type": "related_to | depends_on | contrasts_with | example_of | part_of | causes | caused_by | parent_child",
+      "description": "Brief explanation of the relationship",
+      "evidence": "Supporting evidence from the document if available"
     }
   ]
 }
 
-Concepts (JSON):
-${JSON.stringify(safeConcepts, null, 2)}
+Concept List:
+${JSON.stringify(conceptList, null, 2)}
 
-Optional document text (truncated):
+Optional document context (truncated):
 ${(text || '').substring(0, 12000)}
-`;
+
+Return ONLY the JSON, no additional text.`;
 
   try {
     const content = await runChat(prompt, { maxTokens: 900 });
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
-    const parsed = JSON.parse(jsonContent);
+    
+    // Try to extract JSON from the response
+    const braceMatch = jsonContent.match(/\{[\s\S]*\}/);
+    const cleanJson = braceMatch ? braceMatch[0] : jsonContent;
+    
+    const parsed = JSON.parse(cleanJson);
 
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.relationships)) {
       return { relationships: [] };
     }
 
     const allowedTypes = [
-      'parent_child',
-      'cause_effect',
+      'related_to',
+      'depends_on',
+      'contrasts_with',
       'example_of',
       'part_of',
-      'contradiction',
-      'dependency',
+      'causes',
+      'caused_by',
+      'parent_child'
     ];
 
     const normalizeString = (value) => {
@@ -341,17 +369,48 @@ ${(text || '').substring(0, 12000)}
       return String(value).trim();
     };
 
+    // Build concept index for enrichment
+    const conceptIndex = new Map();
+    for (const concept of safeConcepts) {
+      if (concept && concept.name) {
+        if (!conceptIndex.has(concept.name)) {
+          conceptIndex.set(concept.name, []);
+        }
+        conceptIndex.get(concept.name).push(concept);
+      }
+    }
+
     const relationships = parsed.relationships
       .map((rel) => {
         const from = normalizeString(rel?.from);
         const to = normalizeString(rel?.to);
         if (!from || !to) return null;
 
-        const type = allowedTypes.includes(rel?.type) ? rel.type : 'dependency';
+        const type = allowedTypes.includes(rel?.type) ? rel.type : 'related_to';
         const description = normalizeString(rel?.description);
         const evidence = normalizeString(rel?.evidence);
 
-        return { from, to, type, description, evidence };
+        // Enrich with metadata from concepts
+        const sourceMeta = conceptIndex.get(from) || [];
+        const targetMeta = conceptIndex.get(to) || [];
+
+        return { 
+          from, 
+          to, 
+          type, 
+          description, 
+          evidence,
+          sourceMeta: sourceMeta.map(c => ({
+            type: c.type,
+            definition: c.definition,
+            sourceChunk: c.sourceChunk
+          })),
+          targetMeta: targetMeta.map(c => ({
+            type: c.type,
+            definition: c.definition,
+            sourceChunk: c.sourceChunk
+          }))
+        };
       })
       .filter(Boolean);
 

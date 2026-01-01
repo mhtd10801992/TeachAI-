@@ -393,17 +393,19 @@ function DocumentParserSection({ document, analysis, documentId }) {
         <div className="glass-card" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '15px', marginBottom: '10px' }}>🕸️ Concept Graph (Knowledge Nodes)</h3>
           {conceptsError && (
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              {conceptsError}
+            <div style={{ padding: '10px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', fontSize: '13px', color: '#ef4444', marginBottom: '12px' }}>
+              ❌ {conceptsError}
             </div>
           )}
           {concepts.length > 0 && (
             <>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                {concepts.length} concept{concepts.length === 1 ? '' : 's'} extracted using the strict JSON schema
-                {' '}(<code>{'{ concepts: [{ name, type, definition, examples, related_to, depends_on, contrasts_with, evidence, open_questions }] }'}</code>).
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px' }}>
+                ✅ Extracted <strong>{concepts.length} concept{concepts.length === 1 ? '' : 's'}</strong> using enhanced AI analysis with the following schema:
+                <div style={{ marginTop: '8px', fontSize: '11px', fontFamily: 'monospace', opacity: 0.9 }}>
+                  name, type, definition, examples, related_to, depends_on, contrasts_with, evidence, open_questions
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {Object.entries(
                   concepts.reduce((acc, concept) => {
                     const key = concept.type || 'supporting';
@@ -412,30 +414,54 @@ function DocumentParserSection({ document, analysis, documentId }) {
                     return acc;
                   }, {})
                 ).map(([type, list]) => (
-                  <div key={type} style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(148,163,184,0.4)' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', textTransform: 'capitalize' }}>
-                      {type} concepts ({list.length})
+                  <div key={type} style={{ padding: '14px', borderRadius: '10px', background: 'rgba(15,23,42,0.95)', border: `2px solid ${type === 'core' ? 'rgba(34, 197, 94, 0.5)' : 'rgba(148,163,184,0.4)'}` }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', textTransform: 'capitalize', color: type === 'core' ? '#22c55e' : 'var(--text-primary)' }}>
+                      {type} Concepts ({list.length})
                     </div>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {list.map((c, idx) => (
-                        <li key={idx} style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name || 'Unnamed concept'}</span>
+                        <div key={idx} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', fontSize: '12px', borderLeft: `3px solid ${type === 'core' ? '#22c55e' : '#6366f1'}` }}>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px', fontSize: '13px' }}>
+                            {c.name || 'Unnamed concept'}
+                          </div>
                           {c.definition && (
-                            <span style={{ marginLeft: '6px' }}>– {c.definition}</span>
+                            <div style={{ color: 'var(--text-secondary)', marginBottom: '6px', lineHeight: '1.5' }}>
+                              {c.definition}
+                            </div>
+                          )}
+                          {(Array.isArray(c.examples) && c.examples.length > 0) && (
+                            <div style={{ marginBottom: '4px', fontSize: '11px' }}>
+                              <span style={{ opacity: 0.7 }}>Examples:</span> {c.examples.join(', ')}
+                            </div>
                           )}
                           {(Array.isArray(c.depends_on) && c.depends_on.length > 0) && (
-                            <span style={{ marginLeft: '6px', opacity: 0.8 }}>
-                              (depends on: {c.depends_on.join(', ')})
-                            </span>
+                            <div style={{ marginBottom: '4px', fontSize: '11px', color: '#fbbf24' }}>
+                              <span style={{ opacity: 0.8 }}>⚡ Depends on:</span> {c.depends_on.join(', ')}
+                            </div>
                           )}
                           {(Array.isArray(c.related_to) && c.related_to.length > 0) && (
-                            <span style={{ marginLeft: '6px', opacity: 0.8 }}>
-                              (related: {c.related_to.join(', ')})
-                            </span>
+                            <div style={{ marginBottom: '4px', fontSize: '11px', color: '#60a5fa' }}>
+                              <span style={{ opacity: 0.8 }}>🔗 Related:</span> {c.related_to.join(', ')}
+                            </div>
                           )}
-                        </li>
+                          {(Array.isArray(c.contrasts_with) && c.contrasts_with.length > 0) && (
+                            <div style={{ marginBottom: '4px', fontSize: '11px', color: '#f87171' }}>
+                              <span style={{ opacity: 0.8 }}>⚖️ Contrasts with:</span> {c.contrasts_with.join(', ')}
+                            </div>
+                          )}
+                          {(Array.isArray(c.evidence) && c.evidence.length > 0) && (
+                            <div style={{ marginBottom: '4px', fontSize: '11px', color: '#a78bfa' }}>
+                              <span style={{ opacity: 0.8 }}>📊 Evidence:</span> {c.evidence.join('; ')}
+                            </div>
+                          )}
+                          {(Array.isArray(c.open_questions) && c.open_questions.length > 0) && (
+                            <div style={{ fontSize: '11px', color: '#fb923c' }}>
+                              <span style={{ opacity: 0.8 }}>❓ Open questions:</span> {c.open_questions.join('; ')}
+                            </div>
+                          )}
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -448,30 +474,126 @@ function DocumentParserSection({ document, analysis, documentId }) {
         <div className="glass-card" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '15px', marginBottom: '10px' }}>🧠 Mind Map Layer (Concepts + Relationships)</h3>
           {mindMapError && (
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              {mindMapError}
+            <div style={{ padding: '10px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', fontSize: '13px', color: '#ef4444', marginBottom: '12px' }}>
+              ❌ {mindMapError}
             </div>
           )}
           {mindMap && (
             <>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                Mind map generated and saved under <strong>TeachAI/mind-map/{mindMap.documentId}.json</strong> in storage.
-                It includes {mindMap.concepts?.length || 0} concepts and {mindMap.relationships?.length || 0} relationships.
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px' }}>
+                ✅ Mind map generated and saved to <strong>TeachAI/mind-map/{mindMap.documentId}.json</strong>
+                <div style={{ marginTop: '6px', display: 'flex', gap: '15px', fontSize: '12px' }}>
+                  <span>📊 <strong>{mindMap.concepts?.length || 0}</strong> concepts</span>
+                  <span>🔗 <strong>{mindMap.relationships?.length || 0}</strong> relationships</span>
+                  <span>🕐 Generated: {new Date(mindMap.generatedAt).toLocaleString()}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(mindMap.relationships || []).slice(0, 40).map((rel, idx) => (
-                  <div key={idx} style={{ fontSize: '12px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(148,163,184,0.4)' }}>
-                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                      {rel.from} → {rel.to} <span style={{ opacity: 0.8 }}>({rel.type})</span>
-                    </div>
-                    {rel.description && (
-                      <div style={{ opacity: 0.85 }}>{rel.description}</div>
-                    )}
-                    {rel.evidence && (
-                      <div style={{ opacity: 0.75, marginTop: '2px' }}>Evidence: {rel.evidence}</div>
-                    )}
+              
+              {/* Relationship type summary */}
+              {mindMap.relationships && mindMap.relationships.length > 0 && (
+                <div style={{ marginBottom: '14px', padding: '12px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--primary-color)' }}>
+                    Relationship Types:
                   </div>
-                ))}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '11px' }}>
+                    {Object.entries(
+                      mindMap.relationships.reduce((acc, rel) => {
+                        acc[rel.type] = (acc[rel.type] || 0) + 1;
+                        return acc;
+                      }, {})
+                    ).map(([type, count]) => (
+                      <span key={type} style={{ 
+                        padding: '4px 8px', 
+                        background: 'rgba(255,255,255,0.1)', 
+                        borderRadius: '4px',
+                        border: '1px solid rgba(99, 102, 241, 0.3)'
+                      }}>
+                        {type}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '600px', overflowY: 'auto' }}>
+                {(mindMap.relationships || []).map((rel, idx) => {
+                  // Color coding for relationship types
+                  const typeColors = {
+                    depends_on: '#fbbf24',
+                    related_to: '#60a5fa',
+                    contrasts_with: '#f87171',
+                    causes: '#a78bfa',
+                    caused_by: '#fb923c',
+                    example_of: '#34d399',
+                    part_of: '#38bdf8',
+                    parent_child: '#22c55e'
+                  };
+                  const color = typeColors[rel.type] || '#94a3b8';
+                  
+                  return (
+                    <div key={idx} style={{ 
+                      fontSize: '12px', 
+                      padding: '12px 14px', 
+                      borderRadius: '8px', 
+                      background: 'rgba(15,23,42,0.9)', 
+                      borderLeft: `4px solid ${color}`,
+                      border: `1px solid rgba(148,163,184,0.4)`
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rel.from}</span>
+                        <span style={{ 
+                          padding: '2px 6px', 
+                          background: `${color}33`, 
+                          color: color,
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          fontWeight: '600',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {rel.type.replace(/_/g, ' ')}
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>→</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rel.to}</span>
+                      </div>
+                      {rel.description && (
+                        <div style={{ color: 'var(--text-secondary)', marginBottom: '4px', lineHeight: '1.5' }}>
+                          {rel.description}
+                        </div>
+                      )}
+                      {rel.evidence && (
+                        <div style={{ 
+                          fontSize: '11px', 
+                          color: '#a78bfa', 
+                          marginTop: '6px',
+                          paddingLeft: '10px',
+                          borderLeft: '2px solid rgba(167, 139, 250, 0.3)',
+                          fontStyle: 'italic'
+                        }}>
+                          📝 Evidence: {rel.evidence}
+                        </div>
+                      )}
+                      {(rel.sourceMeta?.length > 0 || rel.targetMeta?.length > 0) && (
+                        <div style={{ 
+                          marginTop: '8px', 
+                          paddingTop: '8px', 
+                          borderTop: '1px solid rgba(255,255,255,0.05)',
+                          fontSize: '10px',
+                          color: 'var(--text-tertiary)',
+                          display: 'flex',
+                          gap: '12px'
+                        }}>
+                          {rel.sourceMeta?.length > 0 && (
+                            <span>Source: {rel.sourceMeta[0].type} concept</span>
+                          )}
+                          {rel.targetMeta?.length > 0 && (
+                            <span>Target: {rel.targetMeta[0].type} concept</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}

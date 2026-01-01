@@ -1,3 +1,29 @@
+import { extractImagesFromPDF } from '../services/pdfImageExtractor.js';
+import { describeImageWithAI } from '../services/imageAIService.js';
+// Analyze images in PDF and add AI descriptions
+export const analyzePDFImages = async (req, res) => {
+  try {
+    const { pdfPath } = req.body;
+    if (!pdfPath) {
+      return res.status(400).json({ error: 'pdfPath is required' });
+    }
+    // Extract images from PDF
+    const images = await extractImagesFromPDF(pdfPath);
+    const imageDescriptions = [];
+    for (const img of images) {
+      const description = await describeImageWithAI(img);
+      imageDescriptions.push({ description });
+    }
+    res.json({
+      success: true,
+      images: images.length,
+      descriptions: imageDescriptions
+    });
+  } catch (error) {
+    console.error('Error analyzing PDF images:', error);
+    res.status(500).json({ error: 'Failed to analyze PDF images' });
+  }
+};
 // Document History Controller with Firebase Storage
 import { 
   loadDocumentsFromFirebase, 

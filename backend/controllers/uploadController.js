@@ -283,7 +283,86 @@ const formatAIAnalysis = (aiAnalysis, file) => {
   };
 };
 
-// Generate fallback summary if AI doesn't return one
-const generateFallbackSummary = (file) => {
-  return `Document "${file.originalname}" has been successfully uploaded and processed. The file contains ${Math.round(file.size / 1024)}KB of data. AI analysis is complete and the document is ready for further review.`;
-};
+    // Extract text from file buffer for AI processing
+    const extractedText = await extractTextFromBuffer(file);
+
+    // Process with real AI
+    const aiAnalysis = await processWithAI(extractedText, {
+      summarize: true,
+      extractTopics: true,
+      findEntities: true,
+      analyzeSentiment: true
+    });
+
+    // Convert AI analysis to display format
+    const mockAnalysis = formatAIAnalysis(aiAnalysis, file);
+
+    // If PDF, extract and analyze images
+    let imageAnalysisResults = [];
+    if (file.mimetype === 'application/pdf') {
+      // Save file locally for image extraction
+      const tempPath = `./temp_${fileId}.pdf`;
+      require('fs').writeFileSync(tempPath, file.buffer);
+      const { extractImagesFromPDF } = await import('../services/pdfImageExtractor.js');
+      const { describeImageWithAI } = await import('../services/imageAIService.js');
+      const images = await extractImagesFromPDF(tempPath);
+      for (const img of images) {
+        const description = await describeImageWithAI(img);
+        imageAnalysisResults.push({ description });
+      }
+      // Optionally delete temp file
+      require('fs').unlinkSync(tempPath);
+    }
+
+    const responseData = {
+      success: true,
+      status: mockAnalysis.needsValidation ? 'pending_validation' : 'processed',
+      document: {
+        id: fileId,
+        filename: file.originalname,
+        size: file.size,
+        uploadDate: new Date().toISOString(),
+        firebaseUrl: fileUploadResult.downloadUrl,
+        firebasePath: fileUploadResult.firebasePath,
+        // AI Analysis Results matching AIAnalysisDisplay structure
+        analysis: {
+          summary: {
+            text: mockAnalysis.summary,
+            confidence: mockAnalysis.summaryConfidence,
+            needsReview: mockAnalysis.summaryConfidence < 0.8
+          },
+          topics: {
+            items: mockAnalysis.topics,
+            confidence: mockAnalysis.topicsConfidence,
+            needsReview: mockAnalysis.topicsConfidence < 0.7
+          },
+          entities: {
+            items: mockAnalysis.entities,
+            confidence: mockAnalysis.entitiesConfidence,
+            needsReview: mockAnalysis.entitiesConfidence < 0.75
+          },
+          sentiment: {
+            value: mockAnalysis.sentiment,
+            confidence: mockAnalysis.sentimentConfidence,
+            needsReview: mockAnalysis.sentimentConfidence < 0.6
+          },
+          // New comprehensive analysis fields
+          insights: aiAnalysis.insights || [],
+          sections: aiAnalysis.sections || [],
+          validationPoints: aiAnalysis.validationPoints || [],
+          documentWithHighlights: aiAnalysis.documentWithHighlights || { fullText: extractedText, highlights: [] },
+          originalText: extractedText,
+          imageAnalysis: imageAnalysisResults
+        },
+        // AI questions if confidence is low
+        questions: mockAnalysis.questions || [],
+        // Processing metadata
+        processingTime: mockAnalysis.processingTime,
+        vectorized: !mockAnalysis.needsValidation
+      }
+    };
+
+    // Save to document history (persistent storage)
+    await saveDocument(responseData);
+
+    res.json(responseData);

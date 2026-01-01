@@ -7,8 +7,11 @@ import {
   searchDocuments,
   getDocumentStats,
   updateDocumentAnalysis,
-  updateValidationPoint
+  updateValidationPoint,
+  analyzePDFImages
 } from '../controllers/documentController.js';
+// Analyze images in PDF and get AI descriptions
+router.post('/analyze-images', analyzePDFImages);
 
 const router = express.Router();
 

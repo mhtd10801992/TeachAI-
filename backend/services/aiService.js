@@ -292,16 +292,72 @@ Return ONLY the JSON, no additional text or markdown.`;
   }
 };
 
+// Helper: Prepare concepts for relationship inference (only essential fields)
+const prepareConceptListForPrompt = (allConcepts) => {
+  return allConcepts.map(c => ({
+    name: c.name,
+    type: c.type,
+    headingPath: c.headingPathFromChunks || c.headingPath || [],
+    pageRange: c.pageRangeFromChunks || c.pageRange || [],
+    related_to: c.related_to || [],
+    depends_on: c.depends_on || [],
+    contrasts_with: c.contrasts_with || [],
+    examples: c.examples || []
+  }));
+};
+
+// Helper: Index concepts by name for enrichment
+const indexConceptsByName = (allConcepts) => {
+  const map = new Map();
+  for (const c of allConcepts) {
+    if (c && c.name) {
+      if (!map.has(c.name)) {
+        map.set(c.name, []);
+      }
+      map.get(c.name).push(c);
+    }
+  }
+  return map;
+};
+
+// Helper: Enrich relationships with source and target metadata
+const enrichRelationships = (relationships, allConcepts) => {
+  const index = indexConceptsByName(allConcepts);
+
+  return relationships.map(r => {
+    const sourceMeta = index.get(r.from || r.source) || [];
+    const targetMeta = index.get(r.to || r.target) || [];
+
+    return {
+      from: r.from || r.source,
+      to: r.to || r.target,
+      type: r.type || r.relationship,
+      description: r.description || '',
+      evidence: r.evidence || '',
+      sourceMeta: sourceMeta.map(c => ({
+        type: c.type,
+        definition: c.definition,
+        sourceChunk: c.sourceChunk || c.chunkId,
+        headingPath: c.headingPathFromChunks || c.headingPath || [],
+        pageRange: c.pageRangeFromChunks || c.pageRange || []
+      })),
+      targetMeta: targetMeta.map(c => ({
+        type: c.type,
+        definition: c.definition,
+        sourceChunk: c.sourceChunk || c.chunkId,
+        headingPath: c.headingPathFromChunks || c.headingPath || [],
+        pageRange: c.pageRangeFromChunks || c.pageRange || []
+      }))
+    };
+  });
+};
+
 // Infer explicit relationships between previously extracted concepts (Layer 3)
 export const inferConceptRelationships = async (concepts, text = '') => {
   const safeConcepts = Array.isArray(concepts) ? concepts.slice(0, 40) : [];
 
   // Prepare concept list for prompt - only include essential fields
-  const conceptList = safeConcepts.map(c => ({
-    name: c.name,
-    type: c.type,
-    definition: c.definition || ''
-  }));
+  const conceptList = prepareConceptListForPrompt(safeConcepts);
 
   const prompt = `You are an expert in knowledge graph construction. Given the following list of concepts extracted from a document, infer additional relationships between them.
 
@@ -321,9 +377,9 @@ JSON Schema:
 {
   "relationships": [
     {
-      "from": "Concept name A",
-      "to": "Concept name B",
-      "type": "related_to | depends_on | contrasts_with | example_of | part_of | causes | caused_by | parent_child",
+      "source": "Concept name A",
+      "target": "Concept name B",
+      "relationship": "related_to | depends_on | contrasts_with | example_of | part_of | causes | caused_by | parent_child",
       "description": "Brief explanation of the relationship",
       "evidence": "Supporting evidence from the document if available"
     }
@@ -332,9 +388,6 @@ JSON Schema:
 
 Concept List:
 ${JSON.stringify(conceptList, null, 2)}
-
-Optional document context (truncated):
-${(text || '').substring(0, 12000)}
 
 Return ONLY the JSON, no additional text.`;
 
@@ -369,52 +422,33 @@ Return ONLY the JSON, no additional text.`;
       return String(value).trim();
     };
 
-    // Build concept index for enrichment
-    const conceptIndex = new Map();
-    for (const concept of safeConcepts) {
-      if (concept && concept.name) {
-        if (!conceptIndex.has(concept.name)) {
-          conceptIndex.set(concept.name, []);
-        }
-        conceptIndex.get(concept.name).push(concept);
-      }
-    }
-
-    const relationships = parsed.relationships
+    // Basic validation and normalization
+    const validRelationships = parsed.relationships
       .map((rel) => {
-        const from = normalizeString(rel?.from);
-        const to = normalizeString(rel?.to);
-        if (!from || !to) return null;
+        const source = normalizeString(rel?.source);
+        const target = normalizeString(rel?.target);
+        const relationship = rel?.relationship || rel?.type;
+        
+        if (!source || !target || !relationship) return null;
 
-        const type = allowedTypes.includes(rel?.type) ? rel.type : 'related_to';
+        const type = allowedTypes.includes(relationship) ? relationship : 'related_to';
         const description = normalizeString(rel?.description);
         const evidence = normalizeString(rel?.evidence);
 
-        // Enrich with metadata from concepts
-        const sourceMeta = conceptIndex.get(from) || [];
-        const targetMeta = conceptIndex.get(to) || [];
-
         return { 
-          from, 
-          to, 
-          type, 
+          source, 
+          target, 
+          relationship: type, 
           description, 
-          evidence,
-          sourceMeta: sourceMeta.map(c => ({
-            type: c.type,
-            definition: c.definition,
-            sourceChunk: c.sourceChunk
-          })),
-          targetMeta: targetMeta.map(c => ({
-            type: c.type,
-            definition: c.definition,
-            sourceChunk: c.sourceChunk
-          }))
+          evidence
         };
       })
       .filter(Boolean);
 
-    return { relationships };
+    // Enrich relationships with metadata from concepts
+    const enriched = enrichRelationships(validRelationships, safeConcepts);
+
+    return { relationships: enriched };
   } catch (error) {
     console.error('Concept relationship inference error:', error.message);
     return { relationships: [] };

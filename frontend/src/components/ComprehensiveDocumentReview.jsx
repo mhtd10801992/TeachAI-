@@ -498,7 +498,8 @@ function DocumentParserSection({ document, analysis, documentId }) {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '11px' }}>
                     {Object.entries(
                       mindMap.relationships.reduce((acc, rel) => {
-                        acc[rel.type] = (acc[rel.type] || 0) + 1;
+                        const type = rel.type || rel.relationship;
+                        acc[type] = (acc[type] || 0) + 1;
                         return acc;
                       }, {})
                     ).map(([type, count]) => (
@@ -508,7 +509,7 @@ function DocumentParserSection({ document, analysis, documentId }) {
                         borderRadius: '4px',
                         border: '1px solid rgba(99, 102, 241, 0.3)'
                       }}>
-                        {type}: {count}
+                        {type.replace(/_/g, ' ')}: {count}
                       </span>
                     ))}
                   </div>
@@ -517,6 +518,11 @@ function DocumentParserSection({ document, analysis, documentId }) {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '600px', overflowY: 'auto' }}>
                 {(mindMap.relationships || []).map((rel, idx) => {
+                  // Handle both field name formats (source/target or from/to)
+                  const fromConcept = rel.from || rel.source;
+                  const toConcept = rel.to || rel.target;
+                  const relationType = rel.type || rel.relationship;
+                  
                   // Color coding for relationship types
                   const typeColors = {
                     depends_on: '#fbbf24',
@@ -528,7 +534,7 @@ function DocumentParserSection({ document, analysis, documentId }) {
                     part_of: '#38bdf8',
                     parent_child: '#22c55e'
                   };
-                  const color = typeColors[rel.type] || '#94a3b8';
+                  const color = typeColors[relationType] || '#94a3b8';
                   
                   return (
                     <div key={idx} style={{ 
@@ -540,7 +546,7 @@ function DocumentParserSection({ document, analysis, documentId }) {
                       border: `1px solid rgba(148,163,184,0.4)`
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rel.from}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fromConcept}</span>
                         <span style={{ 
                           padding: '2px 6px', 
                           background: `${color}33`, 
@@ -551,10 +557,10 @@ function DocumentParserSection({ document, analysis, documentId }) {
                           textTransform: 'uppercase',
                           letterSpacing: '0.5px'
                         }}>
-                          {rel.type.replace(/_/g, ' ')}
+                          {relationType.replace(/_/g, ' ')}
                         </span>
                         <span style={{ color: 'var(--text-secondary)' }}>→</span>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rel.to}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{toConcept}</span>
                       </div>
                       {rel.description && (
                         <div style={{ color: 'var(--text-secondary)', marginBottom: '4px', lineHeight: '1.5' }}>
@@ -581,13 +587,20 @@ function DocumentParserSection({ document, analysis, documentId }) {
                           fontSize: '10px',
                           color: 'var(--text-tertiary)',
                           display: 'flex',
-                          gap: '12px'
+                          flexDirection: 'column',
+                          gap: '4px'
                         }}>
-                          {rel.sourceMeta?.length > 0 && (
-                            <span>Source: {rel.sourceMeta[0].type} concept</span>
+                          {rel.sourceMeta?.length > 0 && rel.sourceMeta[0].headingPath?.length > 0 && (
+                            <div>
+                              📍 Source location: {rel.sourceMeta[0].headingPath.join(' › ')}
+                              {rel.sourceMeta[0].pageRange?.length > 0 && ` (pg. ${rel.sourceMeta[0].pageRange.join('-')})`}
+                            </div>
                           )}
-                          {rel.targetMeta?.length > 0 && (
-                            <span>Target: {rel.targetMeta[0].type} concept</span>
+                          {rel.targetMeta?.length > 0 && rel.targetMeta[0].headingPath?.length > 0 && (
+                            <div>
+                              🎯 Target location: {rel.targetMeta[0].headingPath.join(' › ')}
+                              {rel.targetMeta[0].pageRange?.length > 0 && ` (pg. ${rel.targetMeta[0].pageRange.join('-')})`}
+                            </div>
                           )}
                         </div>
                       )}

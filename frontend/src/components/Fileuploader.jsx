@@ -1,9 +1,63 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import API from "../api/api";
 import AIAnalysisDisplay from "./AIAnalysisDisplay";
 import DocumentSummaryCard from "./DocumentSummaryCard";
 
-export default function FileUploader() {
+// Simple Error Boundary Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="glass-card" style={{
+          padding: '20px',
+          borderRadius: '16px',
+          border: '1px solid #ef4444',
+          background: 'rgba(239, 68, 68, 0.1)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px'
+            }}>
+              ❌
+            </div>
+            <div>
+              <div style={{ fontWeight: '600', marginBottom: '4px', color: '#ef4444' }}>
+                Display Error
+              </div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                {this.state.error?.message || 'Failed to display analysis results'}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default function FileUploader({ onViewHistory }) {
   const [file, setFile] = useState(null);
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -23,6 +77,14 @@ export default function FileUploader() {
 
       const res = await API.post("/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" }
+      });
+
+      console.log('✅ Upload successful, response received:', {
+        success: res.data.success,
+        hasDocument: !!res.data.document,
+        documentId: res.data.document?.id,
+        fileName: res.data.document?.filename,
+        hasAnalysis: !!res.data.document?.analysis
       });
 
       setResponse(res.data);
@@ -284,10 +346,15 @@ export default function FileUploader() {
           )}
 
           {/* AI Analysis Display */}
-          <AIAnalysisDisplay 
-            response={response} 
-            onUpdateAnalysis={handleAnalysisUpdate}
-          />
+          <div style={{ marginTop: '20px' }}>
+            <ErrorBoundary>
+              <AIAnalysisDisplay 
+                response={response} 
+                onUpdateAnalysis={handleAnalysisUpdate}
+                onViewHistory={onViewHistory}
+              />
+            </ErrorBoundary>
+          </div>
         </div>
       )}
     </div>

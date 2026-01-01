@@ -11,6 +11,9 @@ export default function AIChat({ documents }) {
   const [searchMode, setSearchMode] = useState('single'); // 'single' or 'all'
   const [showPreview, setShowPreview] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [useMetadata, setUseMetadata] = useState(true); // Enable metadata queries
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataContext, setMetadataContext] = useState(null);
   const messagesEndRef = useRef(null);
 
   // Mermaid and DOE state
@@ -63,6 +66,40 @@ export default function AIChat({ documents }) {
     }
   };
 
+  // Query metadata for document context
+  const queryDocumentMetadata = async (docId, query, limit = 5) => {
+    try {
+      console.log(`🔍 Querying metadata for doc ${docId}: "${query}"`);
+      const response = await API.post(`/metadata/documents/${docId}/metadata/query`, {
+        query: query,
+        limit: limit
+      });
+      
+      if (response.data && response.data.success) {
+        console.log('✅ Metadata query successful:', response.data);
+        return response.data.results;
+      }
+      return null;
+    } catch (error) {
+      console.warn('⚠️ Metadata query failed:', error.message);
+      return null;
+    }
+  };
+
+  // Get full metadata for document
+  const getDocumentMetadata = async (docId) => {
+    try {
+      const response = await API.get(`/metadata/documents/${docId}/metadata`);
+      if (response.data && response.data.success) {
+        return response.data.metadata;
+      }
+      return null;
+    } catch (error) {
+      console.warn('⚠️ Failed to get document metadata:', error.message);
+      return null;
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -102,10 +139,21 @@ export default function AIChat({ documents }) {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
-
+    setMetadataContext(null);
 
     try {
       let context;
+      let metadataQueryResults = null;
+
+      // Query metadata if enabled and document is selected
+      if (useMetadata && selectedDoc) {
+        setMetadataLoading(true);
+        const docId = selectedDoc.document?.id || selectedDoc.id;
+        metadataQueryResults = await queryDocumentMetadata(docId, input, 5);
+        setMetadataContext(metadataQueryResults);
+        setMetadataLoading(false);
+      }
+
       if (searchMode === 'all' && filteredDocuments && filteredDocuments.length > 0) {
         // Search across all documents (or filtered by category)
         context = {
@@ -120,7 +168,8 @@ export default function AIChat({ documents }) {
             entities: doc.document?.analysis?.entities?.items || doc.analysis?.entities?.items || [],
             category: doc.category
           })),
-          summarize: true
+          summarize: true,
+          metadataContext: metadataQueryResults
         };
       } else if (selectedDoc) {
         // Single document mode
@@ -132,7 +181,8 @@ export default function AIChat({ documents }) {
           topics: docData.analysis?.topics?.items || [],
           entities: docData.analysis?.entities?.items || [],
           sentiment: docData.analysis?.sentiment,
-          summarize: true
+          summarize: true,
+          metadataContext: metadataQueryResults
         };
       } else {
         // General query without document context
@@ -408,6 +458,54 @@ export default function AIChat({ documents }) {
                 </option>
               ))}
             </select>
+          )}
+
+          {/* Metadata Context Toggle */}
+          {selectedDoc && (
+            <button
+              onClick={() => setUseMetadata(!useMetadata)}
+              className={useMetadata ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+              title={useMetadata ? 'Metadata context enabled' : 'Metadata context disabled'}
+            >
+              {useMetadata ? '✅' : '⭕'} Document Context
+              {metadataLoading && ' (loading...)'}
+            </button>
+          )}
+
+          {/* Metadata Query Results Display */}
+          {metadataContext && (
+            <div style={{
+              padding: '10px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              borderRadius: '6px',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              fontSize: '12px',
+              maxHeight: '100px',
+              overflowY: 'auto'
+            }}>
+              <div style={{ fontWeight: '600', marginBottom: '4px', color: '#22c55e' }}>
+                📍 Found {metadataContext.relevantSections?.length || 0} relevant sections
+              </div>
+              {metadataContext.matchingTopics && metadataContext.matchingTopics.length > 0 && (
+                <div style={{ fontSize: '11px', marginBottom: '4px' }}>
+                  Topics: {metadataContext.matchingTopics.slice(0, 3).join(', ')}
+                </div>
+              )}
+              {metadataContext.evidence && metadataContext.evidence.length > 0 && (
+                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                  Evidence available from {metadataContext.evidence.length} location(s)
+                </div>
+              )}
+            </div>
           )}
 
           {/* Document Selector (only shown in single mode) */}

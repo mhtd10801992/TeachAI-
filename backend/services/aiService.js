@@ -1,15 +1,65 @@
+import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { chunkDocument } from './chunkingService.js';
+
+// Provider / model configuration
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-opus-20240229';
+
+// Simple chat abstraction that can talk to OpenAI or Anthropic
+const runChat = async (prompt, { maxTokens = 512 } = {}) => {
+  if (AI_PROVIDER === 'anthropic') {
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicApiKey) {
+      throw new Error('ANTHROPIC_API_KEY not configured');
+    }
+
+    const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+    const msg = await anthropic.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    });
+
+    const textParts = (msg.content || [])
+      .filter((c) => c.type === 'text')
+      .map((c) => c.text || '');
+
+    return textParts.join('').trim();
+  }
+
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  if (!openaiApiKey) {
+    throw new Error('OPENAI_API_KEY not configured');
+  }
+
+  const openai = new OpenAI({ apiKey: openaiApiKey });
+  const response = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: maxTokens,
+  });
+
+  return response.choices[0].message.content.trim();
+};
+
 // Extract linked information as Mermaid code
 export const extractMermaidGraph = async (text) => {
   const prompt = `Read the following document and extract all possible linked information, relationships, or dependencies as a node-link diagram. Output the result as a valid Mermaid 'graph TD' code block. Use clear, concise node names and show all relevant links.\n\nDocument Text:\n${text.substring(0, 30000)}\n\nReturn ONLY the Mermaid code, nothing else.`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 512
-    });
+    const content = await runChat(prompt, { maxTokens: 512 });
     // Extract only the code block
-    const content = response.choices[0].message.content;
     const match = content.match(/```mermaid([\s\S]*?)```/i);
     if (match) return match[1].trim();
     return content.trim();
@@ -23,13 +73,7 @@ export const extractMermaidGraph = async (text) => {
 export const extractDOEFactors = async (text) => {
   const prompt = `Read the following document and extract all factors, variables, or parameters that could be used in a design of experiments (DOE) for process or product optimization. For each factor, provide its name, possible levels/values, and a brief description if available. Return ONLY a JSON array of objects: [{ name, levels, description }], no other text.\n\nDocument Text:\n${text.substring(0, 30000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 512
-    });
-    const content = response.choices[0].message.content;
+    const content = await runChat(prompt, { maxTokens: 512 });
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     const parsed = JSON.parse(jsonContent);
     return Array.isArray(parsed) ? parsed : [parsed];
@@ -38,38 +82,321 @@ export const extractDOEFactors = async (text) => {
     return [];
   }
 };
+
 // Extract actionable steps from a document, with industry-specific and cost-saving focus
 export const extractActionableSteps = async (text) => {
-  const prompt = `You are an expert business analyst for the automobile industry. Carefully read the entire document and extract all important, practical, and workable actions, strategies, or recommendations that a user or company can implement. Focus especially on:
-- Cost-saving strategies
-- Operational efficiency improvements
-- Process optimizations
-- Any actionable steps relevant to the automobile industry
-- Any general business actions that can be applied
+  const prompt = `You are an expert process engineer and business analyst specializing in case study analysis and experimental design. Analyze the provided document for case studies, experiments, research findings, or practical implementations.
 
-For each action, be thorough and specific. If the document contains information that can be used for cost reduction, process improvement, or strategic advantage, include it as an actionable item. Return ONLY a JSON array of strings, no other text or formatting.
+Your task is to create a comprehensive ACTIONABLE PROCESS FLOW that transforms the insights from case studies and experiments into implementable business processes.
+
+Focus on:
+1. **Case Study Analysis**: Identify successful methodologies, experimental results, and proven approaches
+2. **Process Flow Creation**: Design step-by-step implementation processes based on the findings
+3. **Experimental Validation**: Extract validated methods and experimental procedures that can be replicated
+4. **Business Implementation**: Create actionable workflows that companies can follow
+5. **Optimization Strategies**: Identify process improvements and efficiency gains from the case studies
+
+Structure your response as a JSON array where each item represents a complete process flow with:
+- A descriptive title for the process
+- Step-by-step implementation guide
+- Expected outcomes and success metrics
+- Required resources or prerequisites
+- Risk mitigation strategies
+
+Return ONLY a JSON array of objects with this structure:
+[
+  {
+    "title": "Process Flow Title",
+    "steps": ["Step 1", "Step 2", "Step 3"],
+    "outcomes": ["Expected outcome 1", "Expected outcome 2"],
+    "resources": ["Required resource 1", "Required resource 2"],
+    "risks": ["Potential risk 1", "Mitigation strategy"]
+  }
+]
 
 Document Text:\n${text.substring(0, 30000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 512
-    });
-    const content = response.choices[0].message.content;
-    const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
-    const parsed = JSON.parse(jsonContent);
-    return Array.isArray(parsed) ? parsed : [parsed];
+    const content = await runChat(prompt, { maxTokens: 512 });
+    let jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+
+    // Try to isolate the main JSON array if there is extra text
+    const arrayMatch = jsonContent.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      jsonContent = arrayMatch[0];
+    }
+
+    // Remove trailing commas before closing braces/brackets
+    jsonContent = jsonContent.replace(/,\s*([}\]])/g, '$1');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error('Actionable steps JSON parse error, attempting recovery:', parseError.message);
+
+      // Fallback: extract individual objects and parse them one by one
+      const objects = jsonContent.match(/\{[\s\S]*?\}/g) || [];
+      const items = [];
+      for (const obj of objects) {
+        try {
+          const cleanedObj = obj.replace(/,\s*([}\]])/g, '$1');
+          const parsedObj = JSON.parse(cleanedObj);
+          items.push(parsedObj);
+        } catch {
+          // Skip objects that still fail to parse
+        }
+      }
+      return items;
+    }
+
+    const array = Array.isArray(parsed) ? parsed : [parsed];
+    return array;
   } catch (e) {
     console.error('Actionable steps extraction error:', e.message);
     return [];
   }
 };
-// AI Service - OpenAI Integration
 
-import OpenAI from 'openai';
+// Extract concepts and relationships in a strict knowledge-graph JSON schema
+export const extractConceptGraph = async (text) => {
+  const prompt = `You are building a precise knowledge graph from a technical or educational document.
 
+Your task is to identify IMPORTANT CONCEPTS and their relationships, and return them in EXACTLY this JSON schema:
+
+{
+  "concepts": [
+    {
+      "name": "",
+      "type": "core" | "supporting" | "example" | "definition" | "method" | "metric" | "assumption" | "limitation",
+      "definition": "",
+      "examples": [""],
+      "related_to": [""],
+      "depends_on": [""],
+      "contrasts_with": [""],
+      "evidence": [""],
+      "open_questions": [""]
+    }
+  ]
+}
+
+STRICT RULES:
+- Return ONLY valid JSON, nothing else (no prose, no markdown, no comments).
+- The top-level object MUST contain a single key "concepts" with an array value.
+- "type" MUST be one of: "core", "supporting", "example", "definition", "method", "metric", "assumption", "limitation".
+- All array fields (examples, related_to, depends_on, contrasts_with, evidence, open_questions) MUST be arrays of strings (may be empty, but MUST exist).
+
+Focus first on the 10–25 most important concepts for learning the material.
+
+Document Text (truncated to first 30k characters):
+${text.substring(0, 30000)}`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 900 });
+
+    // Strip markdown fences and try to isolate the JSON object
+    let jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+
+    // If there is extra prose around the JSON, grab the first {...} block
+    const braceMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (braceMatch) {
+      jsonContent = braceMatch[0];
+    }
+
+    // Remove common trailing commas that can break JSON.parse
+    jsonContent = jsonContent.replace(/,\s*([}\]])/g, '$1');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error('Concept graph JSON parse error, attempting recovery:', parseError.message);
+
+      // Fallback: try to recover concepts array manually
+      const conceptsMatch = jsonContent.match(/"concepts"\s*:\s*\[([\s\S]*)\]/);
+      if (conceptsMatch) {
+        const arrayBody = conceptsMatch[1];
+        const objectStrings = arrayBody.match(/\{[\s\S]*?\}/g) || [];
+        const concepts = [];
+        for (const objStr of objectStrings) {
+          try {
+            const cleanedObj = objStr.replace(/,\s*([}\]])/g, '$1');
+            const c = JSON.parse(cleanedObj);
+            concepts.push(c);
+          } catch {
+            // Skip invalid concept objects
+          }
+        }
+        return { concepts };
+      }
+
+      // If we can't recover, rethrow to be handled by outer catch
+      throw parseError;
+    }
+
+    // Basic shape enforcement
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.concepts)) {
+      return { concepts: [] };
+    }
+
+    // Normalize each concept to ensure required keys exist
+    const normalizeArray = (value) => {
+      if (!Array.isArray(value)) return [];
+      return value.map((v) => (typeof v === 'string' ? v : String(v))).filter((v) => v.trim().length > 0);
+    };
+
+    const allowedTypes = [
+      'core',
+      'supporting',
+      'example',
+      'definition',
+      'method',
+      'metric',
+      'assumption',
+      'limitation',
+    ];
+
+    const concepts = parsed.concepts.map((c) => {
+      const name = (c && typeof c.name === 'string' ? c.name : '').trim();
+      const definition = (c && typeof c.definition === 'string' ? c.definition : '').trim();
+      const type = allowedTypes.includes(c?.type) ? c.type : 'supporting';
+
+      return {
+        name,
+        type,
+        definition,
+        examples: normalizeArray(c?.examples),
+        related_to: normalizeArray(c?.related_to),
+        depends_on: normalizeArray(c?.depends_on),
+        contrasts_with: normalizeArray(c?.contrasts_with),
+        evidence: normalizeArray(c?.evidence),
+        open_questions: normalizeArray(c?.open_questions),
+      };
+    });
+
+    return { concepts };
+  } catch (error) {
+    console.error('Concept graph extraction error:', error.message);
+    return { concepts: [] };
+  }
+};
+
+// Infer explicit relationships between previously extracted concepts (Layer 3)
+export const inferConceptRelationships = async (concepts, text = '') => {
+  const safeConcepts = Array.isArray(concepts) ? concepts.slice(0, 40) : [];
+
+  const prompt = `You are building LAYER 3 — RELATIONSHIP BUILDING for a knowledge graph.
+
+You are given a list of concepts already extracted from a document.
+Your job is to infer EXPLICIT relationships between these concepts.
+
+Allowed relationship types:
+- "parent_child" (B is a more specific instance or sub-concept of A)
+- "cause_effect" (A causes, influences, or leads to B)
+- "example_of" (A is an example or instance of B)
+- "part_of" (A is a component, module, or sub-system within B)
+- "contradiction" (A conflicts with or challenges B)
+- "dependency" (B depends on A as a prerequisite, input, or requirement)
+
+Return ONLY valid JSON in exactly this schema (no markdown, no comments):
+{
+  "relationships": [
+    {
+      "from": "Concept name A",
+      "to": "Concept name B",
+      "type": "parent_child" | "cause_effect" | "example_of" | "part_of" | "contradiction" | "dependency",
+      "description": "Short natural language explanation of the relationship.",
+      "evidence": "Short quote or reference phrase from the document, if available."
+    }
+  ]
+}
+
+Concepts (JSON):
+${JSON.stringify(safeConcepts, null, 2)}
+
+Optional document text (truncated):
+${(text || '').substring(0, 12000)}
+`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 900 });
+    const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+    const parsed = JSON.parse(jsonContent);
+
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.relationships)) {
+      return { relationships: [] };
+    }
+
+    const allowedTypes = [
+      'parent_child',
+      'cause_effect',
+      'example_of',
+      'part_of',
+      'contradiction',
+      'dependency',
+    ];
+
+    const normalizeString = (value) => {
+      if (typeof value === 'string') return value.trim();
+      if (value == null) return '';
+      return String(value).trim();
+    };
+
+    const relationships = parsed.relationships
+      .map((rel) => {
+        const from = normalizeString(rel?.from);
+        const to = normalizeString(rel?.to);
+        if (!from || !to) return null;
+
+        const type = allowedTypes.includes(rel?.type) ? rel.type : 'dependency';
+        const description = normalizeString(rel?.description);
+        const evidence = normalizeString(rel?.evidence);
+
+        return { from, to, type, description, evidence };
+      })
+      .filter(Boolean);
+
+    return { relationships };
+  } catch (error) {
+    console.error('Concept relationship inference error:', error.message);
+    return { relationships: [] };
+  }
+};
+
+// Explain a single section in the context of the whole document
+export const explainSectionInContext = async ({
+  sectionTitle,
+  sectionText,
+  documentTitle,
+  documentSummary
+}) => {
+  const prompt = `You are a senior research mentor helping a learner understand one section of a technical document.
+
+Document title: ${documentTitle || 'Unknown'}
+Overall summary (if available): ${documentSummary || 'Not provided'}
+
+Section title: ${sectionTitle || 'Untitled section'}
+Section content:
+"""
+${(sectionText || '').substring(0, 8000)}
+"""
+
+Explain this section in the context of the whole document. Your response should have three parts:
+1. Overview – 2-3 sentences in plain language describing what this section is about and why it matters.
+2. Key Points – a bullet list of the 3-6 most important ideas or claims in this section.
+3. Relation to Document – 1-2 sentences explaining how this section connects to the overall document purpose or argument.
+
+Use clear, non-academic language but keep the technical meaning correct.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 600 });
+    return content.trim();
+  } catch (error) {
+    console.error('Section explanation error:', error.message);
+    throw error;
+  }
+};
+
+// AI Service - uses OpenAI by default, Anthropic (Claude) when configured
 export const processWithAI = async (text, options = {}) => {
   if (typeof text !== 'string' || !text.trim()) {
     throw new Error('Input text is required and must be a non-empty string.');
@@ -84,13 +411,51 @@ export const processWithAI = async (text, options = {}) => {
     const entities = options.findEntities ? await findEntities(text) : [];
     // 4. Sentiment Analysis
     const sentiment = options.analyzeSentiment ? await analyzeSentiment(text) : null;
-    // 5. Chunk text for vector storage
-    const chunks = chunkText(text, 1000); // 1000 char chunks
-    // 6. Generate embeddings for each chunk
-    const chunksWithEmbeddings = await Promise.all(
-      chunks.map(async (chunk) => ({
+    // 5. Advanced chunking pipeline (fallbacks to simple chunking when structural blocks are unavailable)
+    let finalChunks = [];
+    try {
+      // For now we treat the whole document as a single paragraph block; later this
+      // can be replaced with real parser blocks when available.
+      const pseudoBlocks = [
+        {
+          id: 'block_1',
+          type: 'paragraph',
+          text,
+          level: 1,
+          page: 1
+        }
+      ];
+
+      const advancedChunks = await chunkDocument(pseudoBlocks, {
+        minTokens: 80,
+        maxTokens: 400,
+        similarityThreshold: 0.75
+      });
+
+      if (Array.isArray(advancedChunks) && advancedChunks.length > 0) {
+        finalChunks = advancedChunks;
+      }
+    } catch (chunkError) {
+      console.error('Advanced chunking failed, falling back to simple chunking:', chunkError.message);
+    }
+
+    if (!finalChunks.length) {
+      const chunks = chunkText(text, 1000); // 1000 char fallback chunks
+      finalChunks = chunks.map((chunk, index) => ({
+        chunkId: `fallback_${index + 1}`,
         text: chunk,
-        embedding: await generateEmbedding(chunk),
+        tokenCount: chunk.length,
+        headingPath: [],
+        pageRange: [],
+        blockIds: []
+      }));
+    }
+
+    // 6. Generate embeddings for each chunk (using finalChunks)
+    const chunksWithEmbeddings = await Promise.all(
+      finalChunks.map(async (chunk) => ({
+        ...chunk,
+        embedding: await generateEmbedding(chunk.text || ''),
       }))
     );
     return {
@@ -110,14 +475,9 @@ export const processWithAI = async (text, options = {}) => {
 
 const generateSummary = async (text) => {
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const prompt = `You are a professional document analyzer. Generate a comprehensive, detailed summary covering all major points, sections, and findings. Include: 1) Main theme/purpose, 2) Key findings/arguments, 3) Important details and data, 4) Conclusions. Be thorough and specific.\n\nDocument Text:\n${text.substring(0, 30000)}`;
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 512
-    });
-    return response.choices[0].message.content.trim();
+    const content = await runChat(prompt, { maxTokens: 512 });
+    return content.trim();
   } catch (error) {
     console.error('❌ Summary generation failed:', error.message);
     throw error;
@@ -127,18 +487,15 @@ const generateSummary = async (text) => {
 const extractTopics = async (text) => {
   const prompt = `Extract 8-12 comprehensive topics/themes from this text covering all major sections and concepts. Return ONLY a JSON array of strings, no other text or formatting.\n\nText:\n${text.substring(0, 30000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 256
-    });
-    const content = response.choices[0].message.content;
+    const content = await runChat(prompt, { maxTokens: 256 });
+    console.log('📝 Raw topic response:', content);
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     const parsed = JSON.parse(jsonContent);
-    return Array.isArray(parsed) ? parsed : [parsed];
+    const result = Array.isArray(parsed) ? parsed : [parsed];
+    console.log('✅ Topics extracted:', result);
+    return result;
   } catch (e) {
-    console.error('Topic parsing error:', e.message);
+    console.error('❌ Topic parsing error:', e.message);
     return [];
   }
 };
@@ -146,13 +503,7 @@ const extractTopics = async (text) => {
 const findEntities = async (text) => {
   const prompt = `Extract named entities (people, organizations, locations) from this text. Return as JSON array of objects with 'name' and 'type' fields.\n\nText:\n${text.substring(0, 10000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 256
-    });
-    const content = response.choices[0].message.content;
+    const content = await runChat(prompt, { maxTokens: 256 });
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     return JSON.parse(jsonContent);
   } catch {
@@ -163,13 +514,8 @@ const findEntities = async (text) => {
 const analyzeSentiment = async (text) => {
   const prompt = `Analyze the sentiment of this text. Return one word: 'positive', 'negative', or 'neutral'.\n\nText:\n${text.substring(0, 5000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 10
-    });
-    return response.choices[0].message.content.toLowerCase().trim();
+    const content = await runChat(prompt, { maxTokens: 10 });
+    return content.toLowerCase().trim();
   } catch {
     return 'neutral';
   }
@@ -200,13 +546,7 @@ const chunkText = (text, maxLength) => {
 const extractKeyInsights = async (text) => {
   const prompt = `Extract 5-8 key insights, findings, or conclusions from this document. Focus on actionable information, important data points, and critical conclusions. Return as JSON array of objects with 'insight' and 'importance' (high/medium/low) fields.\n\nText:\n${text.substring(0, 30000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 256
-    });
-    const content = response.choices[0].message.content;
+    const content = await runChat(prompt, { maxTokens: 256 });
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     return JSON.parse(jsonContent);
   } catch (error) {
@@ -218,13 +558,7 @@ const extractKeyInsights = async (text) => {
 const analyzeSections = async (text) => {
   const prompt = `Analyze the document structure and identify major sections. For each section, provide: 'title', 'summary' (brief), and 'keyPoints' (array). Return as JSON array.\n\nText:\n${text.substring(0, 30000)}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 512
-    });
-    const content = response.choices[0].message.content;
+    const content = await runChat(prompt, { maxTokens: 512 });
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     return JSON.parse(jsonContent);
   } catch (error) {
@@ -236,13 +570,7 @@ const analyzeSections = async (text) => {
 const identifyValidationPoints = async (text, analysis) => {
   const prompt = `You are reviewing a document analysis. Identify parts that need human validation:\n1. Ambiguous or unclear statements\n2. Critical data/numbers that should be verified\n3. Conflicting information\n4. Important dates, names, or figures\n5. Technical terms needing clarification\n\nFor each point, provide:\n- 'text': the exact text snippet (keep it short, 10-20 words)\n- 'reason': why it needs validation\n- 'suggestion': what to check or possible interpretations\n- 'priority': high/medium/low\n- 'location': approximate character position in document\n\nReturn as JSON array of validation points.\n\nDocument excerpt:\n${text.substring(0, 15000)}\n\nAnalysis Summary: ${analysis.summary}`;
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 512
-    });
-    const content = response.choices[0].message.content;
+    const content = await runChat(prompt, { maxTokens: 512 });
     const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
     const validationPoints = JSON.parse(jsonContent);
     return validationPoints.map(vp => ({

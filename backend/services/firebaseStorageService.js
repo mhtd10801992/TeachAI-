@@ -16,7 +16,8 @@ const LOCAL_STORAGE = {
   BASE_DIR: './data',
   DOCUMENTS: './data/documents',
   UPLOADS: './data/uploads',
-  METADATA: './data/metadata'
+  METADATA: './data/metadata',
+  MINDMAP: './data/mindmap'
 };
 
 // Initialize Firebase Admin (if not already initialized)
@@ -62,6 +63,7 @@ const initializeLocalStorage = async () => {
     await fs.mkdir(LOCAL_STORAGE.DOCUMENTS, { recursive: true });
     await fs.mkdir(LOCAL_STORAGE.UPLOADS, { recursive: true });
     await fs.mkdir(LOCAL_STORAGE.METADATA, { recursive: true });
+    await fs.mkdir(LOCAL_STORAGE.MINDMAP, { recursive: true });
     return true;
   } catch (error) {
     console.error('Failed to initialize local storage:', error);
@@ -74,7 +76,65 @@ const FIREBASE_PATHS = {
   DOCUMENTS: 'TeachAI/documents/',
   UPLOADS: 'TeachAI/uploads/',
   METADATA: 'TeachAI/metadata/',
+  MINDMAP: 'TeachAI/mind-map/',
   INDEX: 'TeachAI/documents.json'
+};
+
+// Save a generated mind map (concepts + relationships) for a document
+export const saveMindMapToFirebase = async (documentId, mindMapData) => {
+  try {
+    if (useFirebase && bucket) {
+      const fileName = `${FIREBASE_PATHS.MINDMAP}${documentId}.json`;
+      const file = bucket.file(fileName);
+
+      await file.save(JSON.stringify(mindMapData, null, 2), {
+        metadata: {
+          contentType: 'application/json',
+          metadata: {
+            documentId,
+            savedAt: new Date().toISOString(),
+            type: 'mind-map'
+          }
+        }
+      });
+
+      console.log(`Mind map saved to Firebase: ${fileName}`);
+      return { success: true, storage: 'firebase', firebasePath: fileName };
+    } else {
+      await initializeLocalStorage();
+      const filePath = path.join(LOCAL_STORAGE.MINDMAP, `${documentId}.json`);
+      await fs.writeFile(filePath, JSON.stringify(mindMapData, null, 2));
+      console.log(`Mind map saved locally: ${filePath}`);
+      return { success: true, storage: 'local', localPath: filePath };
+    }
+  } catch (error) {
+    console.error('Error saving mind map:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Load a saved mind map for a document (if it exists)
+export const getMindMapFromFirebase = async (documentId) => {
+  try {
+    if (useFirebase && bucket) {
+      const fileName = `${FIREBASE_PATHS.MINDMAP}${documentId}.json`;
+      const file = bucket.file(fileName);
+      const [exists] = await file.exists();
+      if (!exists) return null;
+
+      const [content] = await file.download();
+      return JSON.parse(content.toString());
+    }
+
+    await initializeLocalStorage();
+    const filePath = path.join(LOCAL_STORAGE.MINDMAP, `${documentId}.json`);
+    if (!existsSync(filePath)) return null;
+    const content = await fs.readFile(filePath, 'utf8');
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Error loading mind map:', error);
+    return null;
+  }
 };
 
 // Save document metadata to Firebase Storage or local fallback
@@ -318,9 +378,13 @@ export const getFirebaseStorageStats = async () => {
     let uploadCount = 0;
     
     for (const file of files) {
-      const [metadata] = await file.getMetadata();
-      totalSize += parseInt(metadata.size || 0);
-      
+      try {
+        const [metadata] = await file.getMetadata();
+        totalSize += parseInt(metadata.size || 0);
+      } catch (err) {
+        console.warn('Skipping file in storage stats due to metadata error:', file.name, err.message);
+      }
+
       if (file.name.includes('/documents/')) {
         documentCount++;
       } else if (file.name.includes('/uploads/')) {

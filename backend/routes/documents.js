@@ -10,10 +10,10 @@ import {
   updateValidationPoint,
   analyzePDFImages
 } from '../controllers/documentController.js';
-// Analyze images in PDF and get AI descriptions
-router.post('/analyze-images', analyzePDFImages);
 
 const router = express.Router();
+// Analyze images in PDF and get AI descriptions
+router.post('/analyze-images', analyzePDFImages);
 
 // Get all documents
 router.get('/', getAllDocuments);

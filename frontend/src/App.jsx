@@ -6,6 +6,8 @@ import DocumentSummaryCard from "./components/DocumentSummaryCard";
 import AIChat from "./components/AIChat";
 import ComprehensiveDocumentReview from "./components/ComprehensiveDocumentReview";
 import WebAnalyzer from "./components/WebAnalyzer";
+import SystemStatus from "./components/SystemStatus";
+import MindMapCanvas from "./components/MindMapCanvas";
 import API from "./api/api";
 import './main.css';
 
@@ -102,6 +104,20 @@ function App() {
             >
               🔍 Validation Dashboard
             </button>
+            
+            <button
+              onClick={() => setCurrentView('status')}
+              className={currentView === 'status' ? 'btn btn-primary' : 'btn btn-secondary'}
+            >
+              🔧 System Status
+            </button>
+
+            <button
+              onClick={() => setCurrentView('mindmap')}
+              className={currentView === 'mindmap' ? 'btn btn-primary' : 'btn btn-secondary'}
+            >
+              🧠 Mind Map
+            </button>
           </div>
         </div>
       </nav>
@@ -146,7 +162,10 @@ function App() {
                   <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
                     📤 Upload File
                   </h3>
-                  <FileUploader />
+                  <FileUploader onViewHistory={(docId) => {
+                    setSelectedDocumentForReview(docId);
+                    setCurrentView('review');
+                  }} />
                 </div>
 
                 {/* Right Column: Web Analysis */}
@@ -253,6 +272,10 @@ function App() {
               setSelectedDocumentForReview(null);
             }}
           />
+        ) : currentView === 'mindmap' ? (
+          <MindMapCanvas />
+        ) : currentView === 'status' ? (
+          <SystemStatus />
         ) : (
           <ValidationDashboard />
         )}

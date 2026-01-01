@@ -1,6 +1,16 @@
 import { saveDocument } from './documentController.js';
 import { saveUploadedFileToFirebase } from '../services/firebaseStorageService.js';
 import { processWithAI } from '../services/aiService.js';
+import { extractImagesFromPDF, renderPDFPagesAsImages, extractImagesFromWord } from '../services/pdfImageExtractor.js';
+import { extractDocumentMetadata } from '../services/documentMetadataService.js';
+// import { extractTablesFromPDF, formatTablesAsText } from '../services/pdfTableExtractor.js';  // DISABLED: pdf-table-extractor has incompatible bundled pdfjs-dist
+import { describeImageWithAI } from '../services/imageAIService.js';
+import fs from 'fs';
+import path from 'path';
+
+// Stub function since pdf-table-extractor is disabled
+const formatTablesAsText = (tables) => '';
+const extractTablesFromPDF = async (path) => [];
 
 export const handleUpload = async (req, res) => {
   try {
@@ -11,33 +21,303 @@ export const handleUpload = async (req, res) => {
     const file = req.file;
     const fileId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Save uploaded file to Firebase Storage
-    const fileUploadResult = await saveUploadedFileToFirebase(file, fileId);
-    
-    if (!fileUploadResult.success) {
-      return res.status(500).json({ 
-        error: "Failed to upload file to Firebase Storage",
-        details: fileUploadResult.error
-      });
+    try {
+      // Save uploaded file to Firebase Storage
+      const fileUploadResult = await saveUploadedFileToFirebase(file, fileId);
+      
+      if (!fileUploadResult.success) {
+        return res.status(500).json({ 
+          error: "Failed to upload file to Firebase Storage",
+          details: fileUploadResult.error
+        });
+      }
+      
+      // Extract text from file buffer for AI processing
+      let extractedText = '';
+      try {
+        extractedText = await extractTextFromBuffer(file);
+        console.log(`📝 Extracted text length: ${extractedText.length} characters`);
+      } catch (textError) {
+        console.error('Text extraction error:', textError.message);
+        extractedText = `[Document processing started but text extraction failed]`;
+      }
+
+      // Extract tables from PDF if it's a PDF file
+      let extractedTables = [];
+      if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
+        console.log('📊 Table extraction currently disabled (pdf-table-extractor incompatible)');
+        // TODO: Re-enable table extraction with a different library once we have a stable solution
+        // try {
+        //   // Save file temporarily to extract tables
+        //   const tempPath = path.join(process.cwd(), 'temp_' + fileId + '.pdf');
+        //   fs.writeFileSync(tempPath, file.buffer);
+        //
+        //   extractedTables = await extractTablesFromPDF(tempPath);
+        //   console.log(`📊 Found ${extractedTables.length} tables in PDF`);
+        //
+        //   // Clean up temp file
+        //   if (fs.existsSync(tempPath)) {
+        //     fs.unlinkSync(tempPath);
+        //   }
+        // } catch (error) {
+        //   console.error('Table extraction error:', error.message);
+        //   extractedTables = [];
+        // }
+      }
+
+      // Combine text and table data
+      const tableText = formatTablesAsText(extractedTables);
+      const combinedText = extractedText + tableText;
+      console.log(`📝 Combined text length: ${combinedText.length} characters (including ${tableText.length} characters from tables)`);
+
+    // Extract and analyze images from PDF if it's a PDF file
+    let imageAnalysisResults = [];
+    if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
+      console.log('🖼️ Extracting images from PDF...');
+      try {
+        // Save file temporarily to extract images
+        const tempPath = path.join(process.cwd(), 'temp_' + fileId + '.pdf');
+        fs.writeFileSync(tempPath, file.buffer);
+
+        const images = await extractImagesFromPDF(tempPath);
+        console.log(`📸 Found ${images.length} embedded images in PDF`);
+
+        // Check if this might be a scanned document (few or no embedded images but has text)
+        const isLikelyScanned = images.length === 0 && extractedText.length > 100;
+        console.log(`📄 Document type: ${isLikelyScanned ? 'Likely scanned PDF' : 'Digital PDF with embedded images'}`);
+
+        if (images.length > 0) {
+          console.log('🤖 Analyzing embedded images with AI...');
+          // Analyze first 5 images to avoid API limits and processing time
+          const imagesToAnalyze = images.slice(0, 5);
+          imageAnalysisResults = await Promise.all(
+            imagesToAnalyze.map(async (imageData, index) => {
+              try {
+                console.log(`🖼️ Analyzing image ${index + 1}, size: ${imageData.buffer.length} bytes, type: ${imageData.type}`);
+                const description = await describeImageWithAI(imageData.buffer);
+                // Convert image buffer to base64 for frontend display
+                const base64Image = imageData.buffer.toString('base64');
+                const imageUrl = `data:image/png;base64,${base64Image}`;
+
+                const result = {
+                  imageIndex: index + 1,
+                  type: imageData.type,
+                  pageNumber: imageData.pageNumber,
+                  description: description,
+                  size: imageData.buffer.length,
+                  dimensions: `${imageData.width}x${imageData.height}`,
+                  imageUrl: imageUrl,
+                  canDelete: true
+                };
+
+                console.log(`✅ Image ${index + 1} analysis complete:`, {
+                  hasDescription: !!description,
+                  descriptionLength: description?.length || 0,
+                  hasImageUrl: !!imageUrl,
+                  imageUrlLength: imageUrl?.length || 0
+                });
+
+                return result;
+              } catch (error) {
+                console.error(`❌ Image ${index + 1} analysis failed:`, error.message);
+
+                // Still try to create imageUrl for display even if AI analysis fails
+                let imageUrl = null;
+                try {
+                  const base64Image = imageData.buffer.toString('base64');
+                  imageUrl = `data:image/png;base64,${base64Image}`;
+                } catch (convertError) {
+                  console.error(`❌ Image conversion also failed:`, convertError.message);
+                }
+
+                return {
+                  imageIndex: index + 1,
+                  type: imageData.type,
+                  pageNumber: imageData.pageNumber,
+                  description: `Image analysis failed: ${error.message}`,
+                  size: imageData.buffer.length,
+                  dimensions: `${imageData.width}x${imageData.height}`,
+                  imageUrl: imageUrl,
+                  error: error.message,
+                  canDelete: true
+                };
+              }
+            })
+          );
+        } else if (isLikelyScanned) {
+          console.log('🤖 Rendering and analyzing scanned document pages...');
+          // Render first few pages as images for analysis
+          const renderedPages = await renderPDFPagesAsImages(tempPath, 3);
+          console.log(`📄 Rendered ${renderedPages.length} pages as images`);
+
+          if (renderedPages.length > 0) {
+            imageAnalysisResults = await Promise.all(
+              renderedPages.map(async (pageData, index) => {
+                try {
+                  const description = await describeImageWithAI(pageData.buffer);
+                  // Convert image buffer to base64 for frontend display
+                  const base64Image = pageData.buffer.toString('base64');
+                  const imageUrl = `data:image/png;base64,${base64Image}`;
+                  return {
+                    imageIndex: index + 1,
+                    type: 'scanned_page',
+                    pageNumber: pageData.pageNumber,
+                    description: description,
+                    size: pageData.buffer.length,
+                    dimensions: `${pageData.width}x${pageData.height}`,
+                    imageUrl: imageUrl,
+                    note: 'Scanned document page rendered and analyzed'
+                  };
+                } catch (error) {
+                  console.error(`❌ Page ${pageData.pageNumber} analysis failed:`, error.message);
+
+                  // Still try to create imageUrl for display even if AI analysis fails
+                  let imageUrl = null;
+                  try {
+                    const base64Image = pageData.buffer.toString('base64');
+                    imageUrl = `data:image/png;base64,${base64Image}`;
+                  } catch (convertError) {
+                    console.error(`❌ Page image conversion also failed:`, convertError.message);
+                  }
+
+                  return {
+                    imageIndex: index + 1,
+                    type: 'scanned_page',
+                    pageNumber: pageData.pageNumber,
+                    description: `Page analysis failed: ${error.message}`,
+                    size: pageData.buffer.length,
+                    dimensions: `${pageData.width}x${pageData.height}`,
+                    imageUrl: imageUrl,
+                    error: error.message,
+                    canDelete: true
+                  };
+                }
+              })
+            );
+          } else {
+            // Fallback if rendering fails
+            imageAnalysisResults = [{
+              imageIndex: 1,
+              type: 'scanned_fallback',
+              description: `This appears to be a scanned document with ${extractedText.length} characters of OCR text. The document contains readable text that has been processed through optical character recognition (OCR). Page rendering for visual analysis was attempted but no pages could be rendered.`,
+              ocrTextLength: extractedText.length,
+              note: 'Scanned document detected - text extraction successful, visual analysis rendering failed'
+            }];
+          }
+        }
+
+        console.log(`✅ Analyzed ${imageAnalysisResults.length} images/pages`);
+        console.log('📊 Image analysis summary:', imageAnalysisResults.map(r => ({
+          index: r.imageIndex,
+          type: r.type,
+          hasDescription: !!r.description && r.description !== 'Image analysis failed',
+          hasImageUrl: !!r.imageUrl,
+          size: r.size
+        })));
+
+        // Clean up temp file
+        fs.unlinkSync(tempPath);
+      } catch (error) {
+        console.error('Image extraction error:', error.message);
+        imageAnalysisResults = [{ error: 'Failed to extract images from PDF' }];
+      }
+    } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+               file.originalname.endsWith('.docx')) {
+      console.log('🖼️ Processing Word document for images...');
+      try {
+        const wordImages = await extractImagesFromWord(file.buffer);
+        console.log(`📸 Found ${wordImages.length} images in Word document`);
+
+        if (wordImages.length > 0) {
+          console.log('🤖 Analyzing Word document images with AI...');
+          // Analyze first 5 images
+          const imagesToAnalyze = wordImages.slice(0, 5);
+          imageAnalysisResults = await Promise.all(
+            imagesToAnalyze.map(async (imageData, index) => {
+              try {
+                console.log(`🖼️ Analyzing Word image ${index + 1}, size: ${imageData.buffer.length} bytes`);
+                const description = await describeImageWithAI(imageData.buffer);
+                const base64Image = imageData.buffer.toString('base64');
+                const imageUrl = `data:image/png;base64,${base64Image}`;
+
+                return {
+                  imageIndex: index + 1,
+                  type: 'word_embedded',
+                  description: description,
+                  size: imageData.buffer.length,
+                  dimensions: `${imageData.width}x${imageData.height}`,
+                  imageUrl: imageUrl,
+                  canDelete: true
+                };
+              } catch (error) {
+                console.error(`❌ Word image ${index + 1} analysis failed:`, error.message);
+                let imageUrl = null;
+                try {
+                  const base64Image = imageData.buffer.toString('base64');
+                  imageUrl = `data:image/png;base64,${base64Image}`;
+                } catch (convertError) {
+                  console.error(`❌ Word image conversion also failed:`, convertError.message);
+                }
+
+                return {
+                  imageIndex: index + 1,
+                  type: 'word_embedded',
+                  description: `Image analysis failed: ${error.message}`,
+                  size: imageData.buffer.length,
+                  dimensions: `${imageData.width}x${imageData.height}`,
+                  imageUrl: imageUrl,
+                  error: error.message,
+                  canDelete: true
+                };
+              }
+            })
+          );
+        } else {
+          imageAnalysisResults = [];
+        }
+      } catch (error) {
+        console.error('Word image extraction error:', error.message);
+        imageAnalysisResults = [{ error: 'Failed to extract images from Word document' }];
+      }
     }
-    
-    // Extract text from file buffer for AI processing
-    const extractedText = await extractTextFromBuffer(file);
-    
+
     // Process with real AI
-    const aiAnalysis = await processWithAI(extractedText, {
-      summarize: true,
-      extractTopics: true,
-      findEntities: true,
-      analyzeSentiment: true
-    });
-    
+    let aiAnalysis = {};
+    try {
+      console.log('🤖 Starting AI analysis...');
+      aiAnalysis = await processWithAI(combinedText, {
+        summarize: true,
+        extractTopics: true,
+        findEntities: true,
+        analyzeSentiment: true
+      });
+      console.log('✅ AI analysis completed:', {
+        hasSummary: !!aiAnalysis.summary,
+        topicsCount: (aiAnalysis.topics || []).length,
+        topicsList: aiAnalysis.topics,
+        entitiesCount: (aiAnalysis.entities || []).length,
+        hasSentiment: !!aiAnalysis.sentiment,
+        confidence: aiAnalysis.confidence
+      });
+    } catch (aiError) {
+      console.error('❌ AI analysis error:', aiError.message);
+      aiAnalysis = {
+        summary: 'AI analysis failed - document uploaded but content analysis unavailable',
+        topics: [],
+        entities: [],
+        sentiment: 'neutral',
+        confidence: 0.5,
+        processingTime: 0
+      };
+    }
+
     // Convert AI analysis to display format
-    const mockAnalysis = formatAIAnalysis(aiAnalysis, file);
-    
+    const formattedAnalysis = formatAIAnalysis(aiAnalysis, file);
+    console.log('📊 Analysis formatted for display');
+
     const responseData = {
       success: true,
-      status: mockAnalysis.needsValidation ? 'pending_validation' : 'processed',
+      status: formattedAnalysis.needsValidation ? 'pending_validation' : 'processed',
       document: {
         id: fileId,
         filename: file.originalname,
@@ -45,55 +325,82 @@ export const handleUpload = async (req, res) => {
         uploadDate: new Date().toISOString(),
         firebaseUrl: fileUploadResult.downloadUrl,
         firebasePath: fileUploadResult.firebasePath,
-        
-        // AI Analysis Results matching AIAnalysisDisplay structure
         analysis: {
           summary: {
-            text: mockAnalysis.summary,
-            confidence: mockAnalysis.summaryConfidence,
-            needsReview: mockAnalysis.summaryConfidence < 0.8
+            text: formattedAnalysis.summary,
+            confidence: formattedAnalysis.summaryConfidence,
+            needsReview: formattedAnalysis.summaryConfidence < 0.8
           },
-          topics: {
-            items: mockAnalysis.topics,
-            confidence: mockAnalysis.topicsConfidence,
-            needsReview: mockAnalysis.topicsConfidence < 0.7
-          },
-          entities: {
-            items: mockAnalysis.entities,
-            confidence: mockAnalysis.entitiesConfidence,
-            needsReview: mockAnalysis.entitiesConfidence < 0.75
-          },
+          topics: formattedAnalysis.topics,
+          entities: formattedAnalysis.entities,
+          topicsConfidence: formattedAnalysis.topicsConfidence,
+          entitiesConfidence: formattedAnalysis.entitiesConfidence,
           sentiment: {
-            value: mockAnalysis.sentiment,
-            confidence: mockAnalysis.sentimentConfidence,
-            needsReview: mockAnalysis.sentimentConfidence < 0.6
+            value: formattedAnalysis.sentiment,
+            confidence: formattedAnalysis.sentimentConfidence,
+            needsReview: formattedAnalysis.sentimentConfidence < 0.6
           },
-          
-          // New comprehensive analysis fields
           insights: aiAnalysis.insights || [],
           sections: aiAnalysis.sections || [],
           validationPoints: aiAnalysis.validationPoints || [],
           documentWithHighlights: aiAnalysis.documentWithHighlights || { fullText: extractedText, highlights: [] },
-          originalText: extractedText
+          originalText: extractedText,
+          combinedText: combinedText,
+          tables: extractedTables,
+          imageAnalysis: imageAnalysisResults
         },
-        
-        // AI questions if confidence is low
-        questions: mockAnalysis.questions || [],
-        
-        // Processing metadata
-        processingTime: mockAnalysis.processingTime,
-        vectorized: !mockAnalysis.needsValidation
+        questions: formattedAnalysis.questions || [],
+        processingTime: formattedAnalysis.processingTime,
+        vectorized: !formattedAnalysis.needsValidation
       }
     };
-    
+
+    // Extract and add comprehensive metadata for chat and processing
+    try {
+      console.log('📚 Extracting document metadata...');
+      const metadata = await extractDocumentMetadata(extractedText, aiAnalysis);
+      responseData.document.metadata = metadata;
+      console.log('✅ Metadata extracted:', {
+        textLength: metadata.content.textLength,
+        wordCount: metadata.content.wordCount,
+        sentenceCount: metadata.content.sentences.length,
+        sections: metadata.structure.sections.length,
+        keyPhrases: metadata.structure.keyPhrases.length,
+        tokens: metadata.tokens.content.totalTokens
+      });
+    } catch (metadataError) {
+      console.error('⚠️ Metadata extraction error:', metadataError.message);
+      // Continue without metadata - it's not critical
+    }
+
     // Save to document history (persistent storage)
-    await saveDocument(responseData);
-    
+    try {
+      console.log('💾 Saving document to database...');
+      await saveDocument(responseData);
+      console.log('✅ Document saved successfully');
+    } catch (saveError) {
+      console.error('Document save error:', saveError.message);
+      // Still return success to user - document was processed
+    }
+
     res.json(responseData);
-    
+    } catch (innerError) {
+      console.error('❌ Upload processing error:', innerError.message);
+      console.error('Error stack:', innerError.stack);
+      res.status(500).json({ 
+        error: "Upload processing failed", 
+        details: innerError.message,
+        stack: innerError.stack
+      });
+    }
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: "Upload failed" });
+    console.error('❌ Upload error:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: "Upload failed", 
+      details: error.message,
+      stack: error.stack
+    });
   }
 };
 
@@ -125,39 +432,6 @@ const generateMockAnalysis = (file) => {
       entitiesConfidence: 0.78,
       sentiment: 'positive',
       sentimentConfidence: 0.74
-    };
-  } else if (filename.includes('manual') || filename.includes('guide') || filename.includes('documentation')) {
-    analysis = {
-      ...analysis,
-      summary: `This document is instructional material providing step-by-step guidance and procedures. It contains detailed explanations, best practices, and reference information for users to follow established processes.`,
-      summaryConfidence: 0.91,
-      topics: ['Documentation', 'Instructions', 'Procedures', 'Guidelines', 'Reference'],
-      topicsConfidence: 0.88,
-      entities: [
-        { name: 'Standard Procedure', type: 'PROCESS' },
-        { name: 'User Manual', type: 'DOCUMENT' },
-        { name: 'Guidelines', type: 'POLICY' }
-      ],
-      entitiesConfidence: 0.82,
-      sentiment: 'neutral',
-      sentimentConfidence: 0.95
-    };
-  } else if (filename.includes('research') || filename.includes('study') || filename.includes('paper')) {
-    analysis = {
-      ...analysis,
-      summary: `This document presents research findings and academic analysis. It likely contains methodology, data collection results, statistical analysis, and scholarly conclusions with supporting evidence and citations.`,
-      summaryConfidence: 0.76,
-      topics: ['Research', 'Academic Study', 'Data Analysis', 'Methodology', 'Findings'],
-      topicsConfidence: 0.83,
-      entities: [
-        { name: 'Research Methodology', type: 'CONCEPT' },
-        { name: 'Statistical Analysis', type: 'PROCESS' },
-        { name: 'Academic Institution', type: 'ORGANIZATION' }
-      ],
-      entitiesConfidence: 0.69,
-      sentiment: 'neutral',
-      sentimentConfidence: 0.81,
-      questions: ['What specific research methodology was used in this study?', 'Are the statistical samples representative of the target population?']
     };
   } else if (filename.includes('contract') || filename.includes('agreement') || filename.includes('legal')) {
     analysis = {
@@ -203,6 +477,50 @@ const generateMockAnalysis = (file) => {
   return analysis;
 };
 
+// Format AI analysis results into the expected structure
+const formatAIAnalysis = (aiAnalysis, file) => {
+  // Base analysis with processing time
+  let analysis = {
+    processingTime: aiAnalysis.processingTime || 1000,
+    needsValidation: false,
+    questions: []
+  };
+
+  // Format summary
+  analysis.summary = aiAnalysis.summary || 'Document analysis completed.';
+  analysis.summaryConfidence = aiAnalysis.confidence || 0.8;
+
+  // Format topics
+  analysis.topics = Array.isArray(aiAnalysis.topics) ? aiAnalysis.topics : [];
+  analysis.topicsConfidence = aiAnalysis.confidence || 0.75;
+
+  // Format entities
+  analysis.entities = Array.isArray(aiAnalysis.entities) ? aiAnalysis.entities : [];
+  analysis.entitiesConfidence = aiAnalysis.confidence || 0.7;
+
+  // Format sentiment
+  if (aiAnalysis.sentiment && typeof aiAnalysis.sentiment === 'object') {
+    analysis.sentiment = aiAnalysis.sentiment.value || 'neutral';
+    analysis.sentimentConfidence = aiAnalysis.sentiment.confidence || aiAnalysis.confidence || 0.8;
+  } else {
+    analysis.sentiment = aiAnalysis.sentiment || 'neutral';
+    analysis.sentimentConfidence = aiAnalysis.confidence || 0.8;
+  }
+
+  // Add validation requirement if confidence is low
+  if (analysis.summaryConfidence < 0.8 || analysis.topicsConfidence < 0.7 ||
+      analysis.entitiesConfidence < 0.75 || analysis.sentimentConfidence < 0.6) {
+    analysis.needsValidation = true;
+    analysis.questions = [
+      'Please review the analysis for accuracy.',
+      'Are there any important details that were missed?',
+      'Does the summary accurately reflect the document content?'
+    ];
+  }
+
+  return analysis;
+};
+
 // Extract text from file buffer
 const extractTextFromBuffer = async (file) => {
   try {
@@ -212,157 +530,100 @@ const extractTextFromBuffer = async (file) => {
       console.log(`📄 Extracted ${text.length} characters from text file`);
       return text;
     }
-    
-    // For PDF files, provide rich context for AI analysis
+
+    // For PDF files, extract real text using pdfjs-dist (more reliable than pdf-parse)
     if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
-      console.log(`📑 Processing PDF: ${file.originalname}`);
-      const metadata = `TASK: Analyze the document named "${file.originalname}"
-
-IMPORTANT: Do NOT say you cannot access the document. Instead, provide intelligent analysis based on the filename.
-
-Document Details:
-- Filename: ${file.originalname}
-- Size: ${Math.round(file.size / 1024)}KB
-- Type: PDF Document
-
-YOUR TASK: Provide a detailed professional analysis of what this document contains:
-1. Write a 2-3 sentence summary describing what content this document likely contains
-2. List specific topics/themes this document would cover
-3. Identify potential key information, data points, or entities in such a document
-4. State the professional tone/sentiment appropriate for this document type
-
-Generate realistic, specific insights as if analyzing the actual content. Be confident and professional in your analysis.`;
-      
-      console.log(`✅ Generated enhanced context for PDF analysis`);
-      return metadata;
+      console.log(`📑 Extracting text from PDF: ${file.originalname}`);
+      try {
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.js');
+        const pdf = pdfjsLib.default;
+        
+        // Disable worker for Node.js environment (no web workers available)
+        pdf.GlobalWorkerOptions.workerSrc = null;
+        
+        // Convert Buffer to Uint8Array
+        const uint8Array = new Uint8Array(file.buffer);
+        const pdfData = await pdf.getDocument({ data: uint8Array }).promise;
+        let fullText = '';
+        
+        // Extract text from each page
+        for (let pageNum = 1; pageNum <= Math.min(pdfData.numPages, 100); pageNum++) {
+          try {
+            const page = await pdfData.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n';
+          } catch (pageError) {
+            console.warn(`Warning: Failed to extract text from page ${pageNum}:`, pageError.message);
+            continue; // Continue with next page
+          }
+        }
+        
+        const text = fullText.replace(/\s+/g, ' ').trim();
+        
+        // Clean up extracted text by removing common PDF metadata patterns
+        const cleanedText = cleanExtractedText(text);
+        
+        console.log(`📄 Extracted ${text.length} characters from PDF with ${pdfData.numPages} pages (cleaned to ${cleanedText.length} characters)`);
+        return cleanedText;
+      } catch (pdfError) {
+        console.error('PDF text extraction failed with pdfjs-dist:', pdfError.message);
+        // Fallback: return a placeholder indicating PDF extraction failed
+        return `[PDF Document: ${file.originalname} - Text extraction failed but document was processed. Content analysis unavailable.]`;
+      }
     }
-    
-    // For other files, provide rich metadata for AI to work with
-    const metadata = `Document Title: ${file.originalname}
-File Type: ${file.mimetype}
-File Size: ${Math.round(file.size / 1024)}KB
 
-Please analyze this document based on its filename and provide:
-- A professional summary of what "${file.originalname}" likely contains
-- Key topics this document might cover
-- Relevant entities or important points based on the filename`;
-    
-    console.log(`📄 Generated metadata context for ${file.originalname}`);
-    return metadata;
+    // For Word documents (.docx), extract text using textract
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.originalname.endsWith('.docx')) {
+      console.log(`📝 Extracting text from Word document: ${file.originalname}`);
+      try {
+        const textract = (await import('textract')).default;
+        const text = await new Promise((resolve, reject) => {
+          textract.fromBufferWithMime(file.mimetype, file.buffer, (error, text) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve(text || '');
+            }
+          });
+        });
+        const cleanedText = text.replace(/\s+/g, ' ').trim();
+        console.log(`📄 Extracted ${cleanedText.length} characters from Word document`);
+        return cleanedText;
+      } catch (wordError) {
+        console.error('Word document text extraction failed:', wordError.message);
+        return `[Word Document: ${file.originalname} - Text extraction failed but document was processed.]`;
+      }
+    }
+
+    // For other file types, return empty string for now
+    console.log(`📄 Unsupported file type: ${file.mimetype}, returning empty text`);
+    return '';
   } catch (error) {
-    console.error('❌ Text extraction error:', error);
-    return `Document uploaded: ${file.originalname}. Error extracting content: ${error.message}`;
+    console.error('Text extraction error:', error.message);
+    return `[Document: ${file.originalname} - Text extraction failed]`;
   }
 };
 
-// Format AI analysis results to match display structure
-const formatAIAnalysis = (aiAnalysis, file) => {
-  const summaryText = aiAnalysis.summary || generateFallbackSummary(file);
-  const topics = aiAnalysis.topics || [];
-  const entities = aiAnalysis.entities || [];
-  const sentiment = aiAnalysis.sentiment || 'neutral';
+// Clean extracted text by removing PDF metadata and headers
+const cleanExtractedText = (text) => {
+  if (!text) return text;
   
-  // Calculate confidence scores
-  const summaryConfidence = aiAnalysis.confidence || 0.85;
-  const topicsConfidence = topics.length > 0 ? 0.88 : 0.65;
-  const entitiesConfidence = entities.length > 0 ? 0.82 : 0.60;
-  const sentimentConfidence = 0.80;
+  // Remove common PDF metadata patterns
+  let cleaned = text
+    // Remove file path metadata
+    .replace(/\[PDF Document:.*?(?=\.)/g, '')
+    // Remove page references and headers
+    .replace(/page\s+\d+/gi, '')
+    .replace(/^Page\s+\d+/gm, '')
+    // Remove DOI, ISSN, ISBN patterns at start of lines
+    .replace(/^(doi|issn|isbn|url):\s*.+$/gmi, '')
+    // Remove header/footer patterns
+    .replace(/^(abstract|introduction|conclusion|references|acknowledgment)s?$/gmi, '')
+    // Clean up multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
   
-  return {
-    processingTime: aiAnalysis.processingTime || 1000,
-    needsValidation: summaryConfidence < 0.75,
-    summary: summaryText,
-    summaryConfidence: summaryConfidence,
-    topics: topics,
-    topicsConfidence: topicsConfidence,
-    entities: entities,
-    entitiesConfidence: entitiesConfidence,
-    sentiment: sentiment,
-    sentimentConfidence: sentimentConfidence,
-    questions: []
-  };
+  return cleaned;
 };
-
-    // Extract text from file buffer for AI processing
-    const extractedText = await extractTextFromBuffer(file);
-
-    // Process with real AI
-    const aiAnalysis = await processWithAI(extractedText, {
-      summarize: true,
-      extractTopics: true,
-      findEntities: true,
-      analyzeSentiment: true
-    });
-
-    // Convert AI analysis to display format
-    const mockAnalysis = formatAIAnalysis(aiAnalysis, file);
-
-    // If PDF, extract and analyze images
-    let imageAnalysisResults = [];
-    if (file.mimetype === 'application/pdf') {
-      // Save file locally for image extraction
-      const tempPath = `./temp_${fileId}.pdf`;
-      require('fs').writeFileSync(tempPath, file.buffer);
-      const { extractImagesFromPDF } = await import('../services/pdfImageExtractor.js');
-      const { describeImageWithAI } = await import('../services/imageAIService.js');
-      const images = await extractImagesFromPDF(tempPath);
-      for (const img of images) {
-        const description = await describeImageWithAI(img);
-        imageAnalysisResults.push({ description });
-      }
-      // Optionally delete temp file
-      require('fs').unlinkSync(tempPath);
-    }
-
-    const responseData = {
-      success: true,
-      status: mockAnalysis.needsValidation ? 'pending_validation' : 'processed',
-      document: {
-        id: fileId,
-        filename: file.originalname,
-        size: file.size,
-        uploadDate: new Date().toISOString(),
-        firebaseUrl: fileUploadResult.downloadUrl,
-        firebasePath: fileUploadResult.firebasePath,
-        // AI Analysis Results matching AIAnalysisDisplay structure
-        analysis: {
-          summary: {
-            text: mockAnalysis.summary,
-            confidence: mockAnalysis.summaryConfidence,
-            needsReview: mockAnalysis.summaryConfidence < 0.8
-          },
-          topics: {
-            items: mockAnalysis.topics,
-            confidence: mockAnalysis.topicsConfidence,
-            needsReview: mockAnalysis.topicsConfidence < 0.7
-          },
-          entities: {
-            items: mockAnalysis.entities,
-            confidence: mockAnalysis.entitiesConfidence,
-            needsReview: mockAnalysis.entitiesConfidence < 0.75
-          },
-          sentiment: {
-            value: mockAnalysis.sentiment,
-            confidence: mockAnalysis.sentimentConfidence,
-            needsReview: mockAnalysis.sentimentConfidence < 0.6
-          },
-          // New comprehensive analysis fields
-          insights: aiAnalysis.insights || [],
-          sections: aiAnalysis.sections || [],
-          validationPoints: aiAnalysis.validationPoints || [],
-          documentWithHighlights: aiAnalysis.documentWithHighlights || { fullText: extractedText, highlights: [] },
-          originalText: extractedText,
-          imageAnalysis: imageAnalysisResults
-        },
-        // AI questions if confidence is low
-        questions: mockAnalysis.questions || [],
-        // Processing metadata
-        processingTime: mockAnalysis.processingTime,
-        vectorized: !mockAnalysis.needsValidation
-      }
-    };
-
-    // Save to document history (persistent storage)
-    await saveDocument(responseData);
-
-    res.json(responseData);

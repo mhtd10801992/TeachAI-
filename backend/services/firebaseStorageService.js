@@ -311,16 +311,17 @@ export const saveUploadedFileToFirebase = async (file, documentId) => {
         }
       });
       
-      const [url] = await firebaseFile.getSignedUrl({
-        action: 'read',
-        expires: '03-09-2491'
-      });
+      // Make the file publicly accessible (no signed URL needed)
+      await firebaseFile.makePublic();
+      
+      // Generate public URL
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
       
       console.log(`File uploaded to Firebase: ${fileName}`);
       return {
         success: true,
         firebasePath: fileName,
-        downloadUrl: url,
+        downloadUrl: publicUrl,
         originalName: file.originalname,
         size: file.size,
         storage: 'firebase'

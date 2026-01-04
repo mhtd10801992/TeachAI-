@@ -425,7 +425,7 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
       borderRadius: '16px',
       transition: 'all 0.3s ease'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
         {/* File Icon */}
         <div style={{
           width: '60px',
@@ -442,7 +442,7 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
         </div>
 
         {/* Document Info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: '250px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
             <h4 style={{ 
               margin: 0, 
@@ -519,7 +519,13 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '8px',
+          minWidth: '200px',
+          flexShrink: 0
+        }}>
           {onReview && (
             <button 
               onClick={onReview}

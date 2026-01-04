@@ -442,14 +442,15 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
         </div>
 
         {/* Document Info */}
-        <div style={{ flex: 1, minWidth: '250px' }}>
+        <div style={{ flex: 1, minWidth: '250px', maxWidth: '600px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
             <h4 style={{ 
               margin: 0, 
-              truncateOverflow: 'ellipsis',
+              textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
-              flex: 1
+              flex: 1,
+              maxWidth: '100%'
             }}>
               {document.document.filename}
             </h4>

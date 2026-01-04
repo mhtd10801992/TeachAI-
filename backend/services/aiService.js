@@ -690,3 +690,245 @@ const highlightDocument = async (text, validationPoints) => {
     }))
   };
 };
+
+// Normalize and clean concept graph (Layer 4 - Graph Normalization)
+export const normalizeConceptGraph = async (rawGraph) => {
+  const { concepts = [], relationships = [] } = rawGraph;
+
+  if (concepts.length === 0) {
+    return { concepts: [], relationships: [] };
+  }
+
+  const prompt = `You are an expert in knowledge graph normalization. Clean, merge, and standardize the following concept graph.
+
+Goals:
+- Merge duplicate concepts with similar or identical meanings.
+- Normalize concept names to short, clear, canonical labels.
+- Remove trivial, redundant, or overly narrow concepts.
+- Ensure all relationships reference valid, normalized concept names.
+- Preserve all meaningful information from the original graph.
+- Do NOT invent new concepts or relationships.
+- Return ONLY valid JSON.
+
+Normalization Rules:
+- If two concepts have similar names or definitions, merge them.
+- Prefer the shortest, clearest name as the canonical label.
+- Treat a concept as an "example concept" when its type is "example" or when it is explicitly linked via an "example_of" relationship.
+- Merge an example concept into its parent concept only when (a) its definition is identical to the parent's definition, or (b) it has a single clear parent via an "example_of" relationship.
+- When merging an example concept, move any unique examples and relationships from the example concept to the parent, then remove the standalone example concept node.
+- Remove concepts that are purely formatting artifacts.
+- Ensure relationships use the normalized concept names.
+- Remove relationships that reference deleted concepts.
+
+JSON Schema:
+{
+  "concepts": [
+    {
+      "name": "",
+      "type": "core | supporting | example | definition | method | metric | assumption | limitation",
+      "definition": "",
+      "examples": [],
+      "related_to": [],
+      "depends_on": [],
+      "contrasts_with": []
+    }
+  ],
+  "relationships": [
+    {
+      "from": "",
+      "to": "",
+      "type": "related_to | depends_on | contrasts_with | example_of | part_of | causes | caused_by | parent_child",
+      "description": ""
+    }
+  ]
+}
+
+Input Graph:
+${JSON.stringify({ concepts, relationships }, null, 2)}
+
+Return ONLY the normalized JSON, no additional text.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 1200 });
+    const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+    
+    // Try to extract JSON from the response
+    const braceMatch = jsonContent.match(/\{[\s\S]*\}/);
+    const cleanJson = braceMatch ? braceMatch[0] : jsonContent;
+    
+    const parsed = JSON.parse(cleanJson);
+
+    if (!parsed || typeof parsed !== 'object') {
+      console.warn('Graph normalization returned invalid structure, using original');
+      return rawGraph;
+    }
+
+    // Validate and normalize the result
+    const normalizedConcepts = Array.isArray(parsed.concepts) ? parsed.concepts : [];
+    const normalizedRelationships = Array.isArray(parsed.relationships) ? parsed.relationships : [];
+
+    // Ensure each concept has an 'id' field matching its 'name'
+    const conceptsWithIds = normalizedConcepts.map(c => ({
+      ...c,
+      id: c.id || c.name,  // Set id to name if not present
+      name: c.name || c.id
+    }));
+
+    // Ensure relationships reference the correct IDs
+    const relationshipsWithIds = normalizedRelationships.map(r => ({
+      ...r,
+      source: r.source || r.from,
+      target: r.target || r.to,
+      type: r.type || r.relationship || 'related_to'
+    }));
+
+    // Log normalization results
+    console.log(`✨ Graph normalized: ${concepts.length} → ${conceptsWithIds.length} concepts, ${relationships.length} → ${relationshipsWithIds.length} relationships`);
+
+    return {
+      concepts: conceptsWithIds,
+      relationships: relationshipsWithIds,
+      normalized: true,
+      originalCount: {
+        concepts: concepts.length,
+        relationships: relationships.length
+      },
+      normalizedCount: {
+        concepts: conceptsWithIds.length,
+        relationships: relationshipsWithIds.length
+      }
+    };
+  } catch (error) {
+    console.error('Graph normalization error:', error.message);
+    // Return original graph on error
+    return { ...rawGraph, normalized: false, error: error.message };
+  }
+};
+
+// LLM-powered concept explanation
+export const explainConcept = async ({ concept, neighbors = [] }) => {
+  const neighborsText = neighbors.length > 0 
+    ? neighbors.map(n => `${n.label} (${n.type})`).join(', ')
+    : 'None';
+
+  const prompt = `You are a research tutor. Explain the concept "${concept.label}" in clear, structured language.
+
+Context:
+- Definition: ${concept.definition || 'N/A'}
+- Type: ${concept.type || 'N/A'}
+- Examples: ${Array.isArray(concept.examples) ? concept.examples.join(', ') : 'N/A'}
+- Related concepts: ${neighborsText}
+- Dependencies: ${Array.isArray(concept.dependsOn) ? concept.dependsOn.join(', ') : 'N/A'}
+
+Requirements:
+1. **Simple Explanation**: Start with a clear, simple explanation (2-3 sentences) that anyone can understand.
+2. **Technical Explanation**: Provide a more detailed, technical explanation with precise terminology.
+3. **Concrete Examples**: Give 1-2 concrete, real-world examples showing how this concept is used or applied.
+4. **Key Relationships**: Briefly explain how this concept relates to its connected concepts.
+
+Format your response with clear headings for each section.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 600 });
+    return content.trim();
+  } catch (error) {
+    console.error('Concept explanation error:', error.message);
+    throw error;
+  }
+};
+
+// LLM-powered concept comparison
+export const compareConcepts = async ({ conceptA, conceptB }) => {
+  const prompt = `Compare the following two concepts in a research context.
+
+**Concept A: ${conceptA.label}**
+- Definition: ${conceptA.definition || 'N/A'}
+- Type: ${conceptA.type || 'N/A'}
+- Examples: ${Array.isArray(conceptA.examples) ? conceptA.examples.join(', ') : 'N/A'}
+- Dependencies: ${Array.isArray(conceptA.dependsOn) ? conceptA.dependsOn.join(', ') : 'N/A'}
+
+**Concept B: ${conceptB.label}**
+- Definition: ${conceptB.definition || 'N/A'}
+- Type: ${conceptB.type || 'N/A'}
+- Examples: ${Array.isArray(conceptB.examples) ? conceptB.examples.join(', ') : 'N/A'}
+- Dependencies: ${Array.isArray(conceptB.dependsOn) ? conceptB.dependsOn.join(', ') : 'N/A'}
+
+Requirements:
+1. **Similarities**: Explain what these concepts have in common.
+2. **Differences**: Highlight the key differences between them.
+3. **Relationship**: Explain how they relate to each other (if at all).
+4. **Usage Context**: Explain when to use one vs the other, or how they work together.
+
+Format your response with clear headings for each section.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 700 });
+    return content.trim();
+  } catch (error) {
+    console.error('Concept comparison error:', error.message);
+    throw error;
+  }
+};
+
+// LLM-powered reasoning chain explanation
+export const explainReasoningChain = async ({ concepts }) => {
+  if (!Array.isArray(concepts) || concepts.length < 2) {
+    throw new Error('Need at least 2 concepts to explain a reasoning chain');
+  }
+
+  const conceptSummary = concepts.map((c, idx) => 
+    `${idx + 1}. **${c.label}** (${c.type}): ${c.definition || 'No definition'}`
+  ).join('\n');
+
+  const prompt = `You are a research tutor. Explain the reasoning chain connecting these concepts from first to last.
+
+**Concept Chain:**
+${conceptSummary}
+
+Requirements:
+1. **Overview**: Start with a brief overview of the entire reasoning chain (2-3 sentences).
+2. **Step-by-Step Flow**: Explain how each concept leads to or depends on the next one.
+3. **Logical Dependencies**: Highlight the logical connections and dependencies between concepts.
+4. **Key Insights**: Explain why this chain of reasoning is important or useful.
+
+Format your response with clear structure showing the progression from concept to concept.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 800 });
+    return content.trim();
+  } catch (error) {
+    console.error('Reasoning chain explanation error:', error.message);
+    throw error;
+  }
+};
+
+// LLM-powered quiz generation
+export const generateQuiz = async ({ concept }) => {
+  const prompt = `You are a tutor creating assessment questions. Generate 5 quiz questions about the concept "${concept.label}".
+
+Context:
+- Definition: ${concept.definition || 'N/A'}
+- Type: ${concept.type || 'N/A'}
+- Examples: ${Array.isArray(concept.examples) ? concept.examples.join(', ') : 'N/A'}
+- Related concepts: ${Array.isArray(concept.relatedTo) ? concept.relatedTo.join(', ') : 'N/A'}
+- Dependencies: ${Array.isArray(concept.dependsOn) ? concept.dependsOn.join(', ') : 'N/A'}
+
+Requirements:
+1. Create 5 questions total:
+   - 2 multiple-choice questions (with 4 options each, mark the correct one with ✓)
+   - 2 short-answer questions (include model answers)
+   - 1 application/scenario question (testing deeper understanding)
+2. Focus on understanding and application, not just memorization.
+3. Make questions progressively harder (easy → medium → hard).
+4. Include clear, correct answers for all questions.
+
+Format each question clearly with its answer.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 800 });
+    return content.trim();
+  } catch (error) {
+    console.error('Quiz generation error:', error.message);
+    throw error;
+  }
+};

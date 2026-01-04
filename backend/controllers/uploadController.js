@@ -45,24 +45,9 @@ export const handleUpload = async (req, res) => {
       // Extract tables from PDF if it's a PDF file
       let extractedTables = [];
       if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
-        console.log('📊 Table extraction currently disabled (pdf-table-extractor incompatible)');
-        // TODO: Re-enable table extraction with a different library once we have a stable solution
-        // try {
-        //   // Save file temporarily to extract tables
-        //   const tempPath = path.join(process.cwd(), 'temp_' + fileId + '.pdf');
-        //   fs.writeFileSync(tempPath, file.buffer);
-        //
-        //   extractedTables = await extractTablesFromPDF(tempPath);
-        //   console.log(`📊 Found ${extractedTables.length} tables in PDF`);
-        //
-        //   // Clean up temp file
-        //   if (fs.existsSync(tempPath)) {
-        //     fs.unlinkSync(tempPath);
-        //   }
-        // } catch (error) {
-        //   console.error('Table extraction error:', error.message);
-        //   extractedTables = [];
-        // }
+        // Table extraction via dedicated library is disabled due to compatibility issues
+        // Tables will be captured through image analysis and text extraction instead
+        extractedTables = [];
       }
 
       // Combine text and table data
@@ -88,8 +73,8 @@ export const handleUpload = async (req, res) => {
 
         if (images.length > 0) {
           console.log('🤖 Analyzing embedded images with AI...');
-          // Analyze first 5 images to avoid API limits and processing time
-          const imagesToAnalyze = images.slice(0, 5);
+          // Analyze first 30 images (increased limit for better coverage)
+          const imagesToAnalyze = images.slice(0, 30);
           imageAnalysisResults = await Promise.all(
             imagesToAnalyze.map(async (imageData, index) => {
               try {
@@ -104,9 +89,11 @@ export const handleUpload = async (req, res) => {
                   type: imageData.type,
                   pageNumber: imageData.pageNumber,
                   description: description,
+                  caption: `Image ${index + 1} - Page ${imageData.pageNumber}`,
                   size: imageData.buffer.length,
                   dimensions: `${imageData.width}x${imageData.height}`,
                   imageUrl: imageUrl,
+                  imageData: imageUrl, // Add for frontend compatibility
                   canDelete: true
                 };
 
@@ -135,9 +122,11 @@ export const handleUpload = async (req, res) => {
                   type: imageData.type,
                   pageNumber: imageData.pageNumber,
                   description: `Image analysis failed: ${error.message}`,
+                  caption: `Image ${index + 1} - Page ${imageData.pageNumber}`,
                   size: imageData.buffer.length,
                   dimensions: `${imageData.width}x${imageData.height}`,
                   imageUrl: imageUrl,
+                  imageData: imageUrl, // Add for frontend compatibility
                   error: error.message,
                   canDelete: true
                 };
@@ -146,8 +135,8 @@ export const handleUpload = async (req, res) => {
           );
         } else if (isLikelyScanned) {
           console.log('🤖 Rendering and analyzing scanned document pages...');
-          // Render first few pages as images for analysis
-          const renderedPages = await renderPDFPagesAsImages(tempPath, 3);
+          // Render up to 30 pages as images for analysis (matching our image limit)
+          const renderedPages = await renderPDFPagesAsImages(tempPath, 30);
           console.log(`📄 Rendered ${renderedPages.length} pages as images`);
 
           if (renderedPages.length > 0) {
@@ -163,9 +152,11 @@ export const handleUpload = async (req, res) => {
                     type: 'scanned_page',
                     pageNumber: pageData.pageNumber,
                     description: description,
+                    caption: `Scanned Page ${pageData.pageNumber}`,
                     size: pageData.buffer.length,
                     dimensions: `${pageData.width}x${pageData.height}`,
                     imageUrl: imageUrl,
+                    imageData: imageUrl,
                     note: 'Scanned document page rendered and analyzed'
                   };
                 } catch (error) {
@@ -185,9 +176,11 @@ export const handleUpload = async (req, res) => {
                     type: 'scanned_page',
                     pageNumber: pageData.pageNumber,
                     description: `Page analysis failed: ${error.message}`,
+                    caption: `Scanned Page ${pageData.pageNumber}`,
                     size: pageData.buffer.length,
                     dimensions: `${pageData.width}x${pageData.height}`,
                     imageUrl: imageUrl,
+                    imageData: imageUrl,
                     error: error.message,
                     canDelete: true
                   };
@@ -230,8 +223,8 @@ export const handleUpload = async (req, res) => {
 
         if (wordImages.length > 0) {
           console.log('🤖 Analyzing Word document images with AI...');
-          // Analyze first 5 images
-          const imagesToAnalyze = wordImages.slice(0, 5);
+          // Analyze first 30 images (increased limit for better coverage)
+          const imagesToAnalyze = wordImages.slice(0, 30);
           imageAnalysisResults = await Promise.all(
             imagesToAnalyze.map(async (imageData, index) => {
               try {
@@ -244,9 +237,11 @@ export const handleUpload = async (req, res) => {
                   imageIndex: index + 1,
                   type: 'word_embedded',
                   description: description,
+                  caption: `Image ${index + 1} from Word document`,
                   size: imageData.buffer.length,
                   dimensions: `${imageData.width}x${imageData.height}`,
                   imageUrl: imageUrl,
+                  imageData: imageUrl,
                   canDelete: true
                 };
               } catch (error) {

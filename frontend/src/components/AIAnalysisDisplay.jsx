@@ -116,7 +116,7 @@ export default function AIAnalysisDisplay({ response, onUpdateAnalysis, onViewHi
       {analysis?.imageAnalysis && analysis.imageAnalysis.length > 0 && (
         <AnalysisCard
           icon="🖼️"
-          title="Visual Analysis"
+          title={`Visual Analysis (${analysis.imageAnalysis.length} image${analysis.imageAnalysis.length !== 1 ? 's' : ''})`}
           confidence={1}
           needsReview={false}
         >
@@ -189,6 +189,26 @@ export default function AIAnalysisDisplay({ response, onUpdateAnalysis, onViewHi
                 </div>
               </div>
             ))}
+          </div>
+          
+          {/* Info box pointing to Images tab */}
+          <div style={{
+            marginTop: '16px',
+            padding: '12px',
+            background: 'rgba(99, 102, 241, 0.1)',
+            borderRadius: '8px',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            fontSize: '13px',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span style={{ fontSize: '16px' }}>💡</span>
+            <span>
+              <strong>Tip:</strong> Go to the <strong>"Images & Tables"</strong> tab in Comprehensive Review to view all images in a gallery, 
+              select specific images for deeper AI analysis, and see how they relate to the document content.
+            </span>
           </div>
         </AnalysisCard>
       )}

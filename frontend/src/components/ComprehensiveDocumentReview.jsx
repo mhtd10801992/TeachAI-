@@ -111,6 +111,825 @@ const SummaryList = ({ items, title }) => (
   </div>
 );
 
+// Image Gallery Section Component
+function ImageGallerySection({ document, analysis, documentId }) {
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [analyzingImages, setAnalyzingImages] = useState(false);
+  const [imageAnalysisResults, setImageAnalysisResults] = useState({});
+  const [expandedImage, setExpandedImage] = useState(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [deletedImages, setDeletedImages] = useState([]);
+  const [imageHeight, setImageHeight] = useState(400);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartY, setDragStartY] = useState(0);
+  const [dragStartHeight, setDragStartHeight] = useState(0);
+  const [renderError, setRenderError] = useState(null);
+
+  // Wrap everything in try-catch for error handling
+  try {
+
+  // Get all images from analysis, filtering out deleted ones
+  const allImages = (analysis?.imageAnalysis || []).filter((_, idx) => !deletedImages.includes(idx));
+  const allTables = analysis?.tables || [];
+  
+  // Ensure currentImageIndex is valid
+  const validCurrentIndex = Math.max(0, Math.min(currentImageIndex, allImages.length - 1));
+  const currentImage = allImages[validCurrentIndex];
+  const hasAnalysis = imageAnalysisResults[validCurrentIndex];
+
+  // Update currentImageIndex if it's out of bounds
+  useEffect(() => {
+    if (allImages.length > 0 && currentImageIndex >= allImages.length) {
+      setCurrentImageIndex(Math.max(0, allImages.length - 1));
+    }
+  }, [allImages.length, currentImageIndex]);
+
+  // Navigation functions
+  const goToNextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % allImages.length);
+  };
+
+  const goToPreviousImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+  };
+
+  // Delete current image
+  const deleteCurrentImage = () => {
+    if (allImages.length === 0) return;
+    
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete "${currentImage?.caption || `Image ${validCurrentIndex + 1}`}"?\n\nThis cannot be undone.`
+    );
+    
+    if (!confirmDelete) return;
+
+    // Get the original index from analysis array
+    const originalIndex = (analysis?.imageAnalysis || []).findIndex(img => img === currentImage);
+    
+    // Add to deleted list
+    setDeletedImages(prev => [...prev, originalIndex]);
+    
+    // Remove from selected if it was selected
+    setSelectedImages(prev => prev.filter(i => i !== originalIndex));
+    
+    // Remove analysis result if exists
+    setImageAnalysisResults(prev => {
+      const newResults = { ...prev };
+      delete newResults[originalIndex];
+      return newResults;
+    });
+    
+    // Adjust current index after deletion
+    if (allImages.length === 1) {
+      // Last image deleted
+      setCurrentImageIndex(0);
+    } else if (currentImageIndex >= allImages.length - 1) {
+      // Was viewing last image, go to previous
+      setCurrentImageIndex(Math.max(0, allImages.length - 2));
+    }
+    // else: stay at current index (will show next image automatically)
+  };
+
+  // Toggle image selection
+  const toggleImageSelection = (index) => {
+    setSelectedImages(prev => {
+      if (prev.includes(index)) {
+        return prev.filter(i => i !== index);
+      }
+      return [...prev, index];
+    });
+  };
+
+  // Select all images
+  const selectAll = () => {
+    const allOriginalIndices = allImages.map(img => 
+      (analysis?.imageAnalysis || []).findIndex(original => original === img)
+    );
+    setSelectedImages(allOriginalIndices);
+  };
+
+  // Deselect all images
+  const deselectAll = () => {
+    setSelectedImages([]);
+  };
+
+  // Drag resize handlers
+  const handleResizeStart = (e) => {
+    setIsDragging(true);
+    setDragStartY(e.clientY);
+    setDragStartHeight(imageHeight);
+    e.preventDefault();
+  };
+
+  // Add event listeners for drag
+  useEffect(() => {
+    const handleResizeMove = (e) => {
+      const deltaY = e.clientY - dragStartY;
+      const newHeight = Math.max(200, Math.min(1000, dragStartHeight + deltaY));
+      setImageHeight(newHeight);
+    };
+
+    const handleResizeEnd = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleResizeMove);
+      window.addEventListener('mouseup', handleResizeEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleResizeMove);
+        window.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [isDragging, dragStartY, dragStartHeight]);
+
+  // Analyze selected images with AI
+  const analyzeSelectedImages = async () => {
+    if (selectedImages.length === 0) return;
+    
+    setAnalyzingImages(true);
+    try {
+      const response = await API.post('/ai/analyze-images', {
+        documentId,
+        imageIndices: selectedImages
+      });
+      
+      setImageAnalysisResults(response.data?.results || {});
+    } catch (error) {
+      console.error('Error analyzing images:', error);
+      alert('Failed to analyze images. Please try again.');
+    } finally {
+      setAnalyzingImages(false);
+    }
+  };
+
+  if (!document || !analysis) {
+    return (
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <div style={{ fontSize: '14px' }}>Loading image gallery...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <ResearchSection title="📸 Extracted Images & Tables">
+        <div style={{ 
+          marginBottom: '25px', 
+          padding: '20px', 
+          background: 'rgba(99, 102, 241, 0.1)', 
+          borderRadius: '12px',
+          border: '1px solid rgba(99, 102, 241, 0.3)'
+        }}>
+          <div style={{ fontSize: '14px', marginBottom: '15px', color: 'var(--text-secondary)' }}>
+            Found <strong>{(analysis?.imageAnalysis || []).length}</strong> image{(analysis?.imageAnalysis || []).length !== 1 ? 's' : ''} and <strong>{allTables.length}</strong> table{allTables.length !== 1 ? 's' : ''} in this document.
+            {deletedImages.length > 0 && (
+              <span style={{ color: 'rgba(239, 68, 68, 1)', fontWeight: '600' }}>
+                {' '}({deletedImages.length} deleted)
+              </span>
+            )}
+            {allImages.length > 0 && ` Currently showing ${allImages.length} image${allImages.length !== 1 ? 's' : ''}. Use the carousel to browse and delete unwanted images.`}
+          </div>
+          
+          {allImages.length > 0 && (
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                onClick={selectAll}
+                style={{
+                  padding: '8px 16px',
+                  background: 'rgba(99, 102, 241, 0.2)',
+                  border: '1px solid rgba(99, 102, 241, 0.5)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Select All ({allImages.length})
+              </button>
+              
+              <button
+                onClick={deselectAll}
+                disabled={selectedImages.length === 0}
+                style={{
+                  padding: '8px 16px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.5)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  cursor: selectedImages.length === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  opacity: selectedImages.length === 0 ? 0.5 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                Deselect All
+              </button>
+              
+              <button
+                onClick={analyzeSelectedImages}
+                disabled={selectedImages.length === 0 || analyzingImages}
+                style={{
+                  padding: '8px 16px',
+                  background: selectedImages.length > 0 ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'rgba(100, 100, 100, 0.3)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  cursor: selectedImages.length === 0 || analyzingImages ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  opacity: selectedImages.length === 0 || analyzingImages ? 0.5 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {analyzingImages 
+                  ? '🔄 Analyzing...' 
+                  : `🤖 Analyze Selected (${selectedImages.length})`}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Image Carousel */}
+        {allImages.length > 0 && (
+          <div style={{ marginBottom: '35px' }}>
+            <h3 style={{ 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              marginBottom: '20px',
+              color: 'var(--primary-color)'
+            }}>
+              📷 Images ({allImages.length})
+            </h3>
+            
+            {/* Main Image Display with Navigation */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '12px',
+              padding: '20px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              marginBottom: '20px'
+            }}>
+              {/* Image Counter */}
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '15px',
+                fontSize: '14px',
+                color: 'var(--text-secondary)'
+              }}>
+                Image <strong>{validCurrentIndex + 1}</strong> of <strong>{allImages.length}</strong>
+              </div>
+
+              {/* Image Display with Arrows */}
+              <div style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '15px'
+              }}>
+                {/* Left Arrow */}
+                <button
+                  onClick={goToPreviousImage}
+                  disabled={allImages.length <= 1}
+                  style={{
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '50%',
+                    background: 'rgba(99, 102, 241, 0.3)',
+                    border: '2px solid rgba(99, 102, 241, 0.6)',
+                    color: 'white',
+                    fontSize: '24px',
+                    cursor: allImages.length <= 1 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: allImages.length <= 1 ? 0.3 : 1,
+                    transition: 'all 0.3s',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={(e) => {
+                    if (allImages.length > 1) {
+                      e.target.style.background = 'rgba(99, 102, 241, 0.6)';
+                      e.target.style.transform = 'scale(1.1)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(99, 102, 241, 0.3)';
+                    e.target.style.transform = 'scale(1)';
+                  }}
+                >
+                  ←
+                </button>
+
+                {/* Main Image */}
+                <div style={{
+                  flex: 1,
+                  maxWidth: '800px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: `${imageHeight}px`,
+                  maxHeight: `${imageHeight}px`,
+                  position: 'relative',
+                  userSelect: isDragging ? 'none' : 'auto'
+                }}>
+                  {/* Selection Checkbox */}
+                  <div
+                    onClick={() => {
+                      const originalIndex = (analysis?.imageAnalysis || []).findIndex(img => img === currentImage);
+                      toggleImageSelection(originalIndex);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '20px',
+                      left: '20px',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: selectedImages.some(idx => {
+                        const originalImg = (analysis?.imageAnalysis || [])[idx];
+                        return originalImg === currentImage;
+                      })
+                        ? 'rgba(99, 102, 241, 1)' 
+                        : 'rgba(0, 0, 0, 0.6)',
+                      border: '2px solid white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: 2,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {selectedImages.some(idx => {
+                      const originalImg = (analysis?.imageAnalysis || [])[idx];
+                      return originalImg === currentImage;
+                    }) && (
+                      <span style={{ color: 'white', fontSize: '18px' }}>✓</span>
+                    )}
+                  </div>
+
+                  {/* Delete Button */}
+                  <button
+                    onClick={deleteCurrentImage}
+                    style={{
+                      position: 'absolute',
+                      top: '20px',
+                      right: '20px',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      background: 'rgba(239, 68, 68, 0.8)',
+                      border: '2px solid rgba(239, 68, 68, 1)',
+                      color: 'white',
+                      fontSize: '18px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 2,
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(239, 68, 68, 1)';
+                      e.target.style.transform = 'scale(1.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(239, 68, 68, 0.8)';
+                      e.target.style.transform = 'scale(1)';
+                    }}
+                    title="Delete this image"
+                  >
+                    🗑️
+                  </button>
+
+                  {(currentImage?.imageData || currentImage?.imageUrl) ? (
+                    <img
+                      src={currentImage.imageData || currentImage.imageUrl}
+                      alt={currentImage.caption || `Image ${validCurrentIndex + 1}`}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: `${imageHeight - 20}px`,
+                        objectFit: 'contain',
+                        cursor: 'pointer',
+                        pointerEvents: isDragging ? 'none' : 'auto'
+                      }}
+                      onClick={() => setExpandedImage(validCurrentIndex)}
+                    />
+                  ) : (
+                    <div style={{ 
+                      color: 'var(--text-secondary)', 
+                      fontSize: '14px', 
+                      textAlign: 'center' 
+                    }}>
+                      📷<br/>Image Preview<br/>Unavailable
+                    </div>
+                  )}
+
+                  {/* Resize Handle */}
+                  <div
+                    onMouseDown={handleResizeStart}
+                    style={{
+                      position: 'absolute',
+                      bottom: '0',
+                      left: '0',
+                      right: '0',
+                      height: '8px',
+                      background: isDragging 
+                        ? 'rgba(99, 102, 241, 0.8)' 
+                        : 'rgba(255, 255, 255, 0.1)',
+                      cursor: 'ns-resize',
+                      borderBottomLeftRadius: '8px',
+                      borderBottomRightRadius: '8px',
+                      transition: isDragging ? 'none' : 'background 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 3
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isDragging) {
+                        e.target.style.background = 'rgba(99, 102, 241, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isDragging) {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                      }
+                    }}
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '4px',
+                      background: 'rgba(255, 255, 255, 0.5)',
+                      borderRadius: '2px'
+                    }}></div>
+                  </div>
+                </div>
+
+                {/* Right Arrow */}
+                <button
+                  onClick={goToNextImage}
+                  disabled={allImages.length <= 1}
+                  style={{
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '50%',
+                    background: 'rgba(99, 102, 241, 0.3)',
+                    border: '2px solid rgba(99, 102, 241, 0.6)',
+                    color: 'white',
+                    fontSize: '24px',
+                    cursor: allImages.length <= 1 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: allImages.length <= 1 ? 0.3 : 1,
+                    transition: 'all 0.3s',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={(e) => {
+                    if (allImages.length > 1) {
+                      e.target.style.background = 'rgba(99, 102, 241, 0.6)';
+                      e.target.style.transform = 'scale(1.1)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(99, 102, 241, 0.3)';
+                    e.target.style.transform = 'scale(1)';
+                  }}
+                >
+                  →
+                </button>
+              </div>
+
+              {/* Image Info Below */}
+              <div style={{
+                marginTop: '20px',
+                padding: '15px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <div style={{
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  marginBottom: '10px',
+                  color: 'var(--text-primary)'
+                }}>
+                  {currentImage?.caption || `Image ${currentImageIndex + 1}`}
+                  {currentImage?.pageNumber && ` - Page ${currentImage.pageNumber}`}
+                </div>
+
+                {/* Initial AI Analysis */}
+                {currentImage?.description && (
+                  <div style={{
+                    marginBottom: '12px',
+                    padding: '12px',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(99, 102, 241, 0.2)'
+                  }}>
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: 'rgba(99, 102, 241, 1)',
+                      marginBottom: '6px'
+                    }}>
+                      🤖 Initial AI Analysis:
+                    </div>
+                    <div style={{
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      lineHeight: '1.6'
+                    }}>
+                      {currentImage.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* Deep AI Analysis */}
+                {hasAnalysis && (
+                  <div style={{
+                    padding: '12px',
+                    background: 'rgba(34, 197, 94, 0.15)',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(34, 197, 94, 0.3)'
+                  }}>
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: 'rgba(34, 197, 94, 1)',
+                      marginBottom: '6px'
+                    }}>
+                      ✅ Deep AI Analysis:
+                    </div>
+                    <div style={{
+                      fontSize: '13px',
+                      color: 'var(--text-primary)',
+                      lineHeight: '1.6'
+                    }}>
+                      {hasAnalysis.explanation || hasAnalysis.relationship || 'Analysis complete'}
+                    </div>
+                  </div>
+                )}
+
+                {currentImage?.dimensions && (
+                  <div style={{
+                    marginTop: '10px',
+                    fontSize: '12px',
+                    color: 'var(--text-tertiary)'
+                  }}>
+                    📐 {currentImage.dimensions}
+                    {currentImage.size && ` • 📊 ${Math.round(currentImage.size / 1024)} KB`}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Thumbnail Strip */}
+            <div style={{
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              whiteSpace: 'nowrap',
+              padding: '10px 0',
+              background: 'rgba(0, 0, 0, 0.1)',
+              borderRadius: '8px'
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                gap: '10px',
+                padding: '0 10px'
+              }}>
+                {allImages.map((image, index) => (
+                  <div
+                    key={index}
+                    onClick={() => setCurrentImageIndex(index)}
+                    style={{
+                      width: '100px',
+                      height: '75px',
+                      flexShrink: 0,
+                      borderRadius: '6px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      border: currentImageIndex === index 
+                        ? '3px solid rgba(99, 102, 241, 1)' 
+                        : '2px solid rgba(255, 255, 255, 0.2)',
+                      opacity: currentImageIndex === index ? 1 : 0.6,
+                      transition: 'all 0.3s',
+                      position: 'relative',
+                      background: 'rgba(0, 0, 0, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentImageIndex !== index) e.currentTarget.style.opacity = 0.9;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentImageIndex !== index) e.currentTarget.style.opacity = 0.6;
+                    }}
+                  >
+                    {(image.imageData || image.imageUrl) ? (
+                      <img
+                        src={image.imageData || image.imageUrl}
+                        alt={`Thumbnail ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '10px',
+                        color: 'var(--text-tertiary)'
+                      }}>
+                        📷
+                      </div>
+                    )}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '2px',
+                      right: '2px',
+                      background: 'rgba(0, 0, 0, 0.7)',
+                      color: 'white',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: '600'
+                    }}>
+                      {index + 1}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tables Section */}
+        {allTables.length > 0 ? (
+          <div style={{ marginTop: '35px' }}>
+            <h3 style={{ 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              marginBottom: '20px',
+              color: 'var(--primary-color)'
+            }}>
+              📊 Tables ({allTables.length})
+            </h3>
+            
+            {allTables.map((table, index) => (
+              <ResearchTable
+                key={index}
+                title={table.caption || `Table ${index + 1}`}
+                headers={table.headers || []}
+                rows={table.rows || []}
+                caption={table.description}
+              />
+            ))}
+          </div>
+        ) : allImages.length > 0 && (
+          <div style={{ marginTop: '35px' }}>
+            <h3 style={{ 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              marginBottom: '20px',
+              color: 'var(--primary-color)'
+            }}>
+              📊 Tables
+            </h3>
+            <div style={{
+              padding: '20px',
+              background: 'rgba(255, 193, 7, 0.1)',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 193, 7, 0.3)',
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.6'
+            }}>
+              <div style={{ fontWeight: '600', marginBottom: '8px', color: 'rgba(255, 193, 7, 1)' }}>
+                ℹ️ Table Extraction Status
+              </div>
+              <div>
+                Automatic table extraction is currently disabled due to technical limitations. 
+                However, <strong>table content is still captured in the text analysis</strong> and available in:
+              </div>
+              <ul style={{ marginTop: '8px', marginLeft: '20px' }}>
+                <li>Document text content</li>
+                <li>AI summary and analysis</li>
+                <li>Images (if tables appear as images)</li>
+              </ul>
+              <div style={{ marginTop: '8px', fontSize: '12px', fontStyle: 'italic' }}>
+                💡 Tip: Tables visible as images will be shown in the Images section above.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {allImages.length === 0 && allTables.length === 0 && (
+          <div style={{
+            padding: '60px 20px',
+            textAlign: 'center',
+            color: 'var(--text-secondary)',
+            fontSize: '14px'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '15px' }}>📭</div>
+            <div>No images or tables found in this document.</div>
+          </div>
+        )}
+      </ResearchSection>
+
+      {/* Expanded Image Modal */}
+      {expandedImage !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.95)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px'
+          }}
+          onClick={() => setExpandedImage(null)}
+        >
+          <img
+            src={allImages[expandedImage].imageData || allImages[expandedImage].imageUrl}
+            alt={`Expanded image ${expandedImage + 1}`}
+            style={{
+              maxWidth: '90%',
+              maxHeight: '90%',
+              objectFit: 'contain',
+              borderRadius: '12px',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8)'
+            }}
+          />
+          
+          <button
+            onClick={() => setExpandedImage(null)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              border: '2px solid white',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              color: 'white',
+              fontSize: '24px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </div>
+  );
+  } catch (error) {
+    console.error('ImageGallerySection render error:', error);
+    return (
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <div style={{ fontSize: '14px', color: '#ef4444' }}>
+          Error loading image gallery: {error.message}
+        </div>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{
+            marginTop: '15px',
+            padding: '8px 16px',
+            background: 'rgba(99, 102, 241, 0.2)',
+            border: '1px solid rgba(99, 102, 241, 0.5)',
+            borderRadius: '8px',
+            color: 'var(--text-primary)',
+            cursor: 'pointer',
+            fontSize: '13px'
+          }}
+        >
+          Reload Page
+        </button>
+      </div>
+    );
+  }
+}
+
 function DocumentParserSection({ document, analysis, documentId }) {
   const [activeExplanation, setActiveExplanation] = useState(null);
   const [explanationLoadingId, setExplanationLoadingId] = useState(null);
@@ -118,6 +937,8 @@ function DocumentParserSection({ document, analysis, documentId }) {
   const [concepts, setConcepts] = useState([]);
   const [conceptsLoading, setConceptsLoading] = useState(false);
   const [conceptsError, setConceptsError] = useState(null);
+  const [normalizedGraph, setNormalizedGraph] = useState(null);
+  const [normalizing, setNormalizing] = useState(false);
   const [mindMap, setMindMap] = useState(null);
   const [mindMapLoading, setMindMapLoading] = useState(false);
   const [mindMapError, setMindMapError] = useState(null);
@@ -237,6 +1058,37 @@ function DocumentParserSection({ document, analysis, documentId }) {
     }
   };
 
+  const handleNormalizeGraph = async () => {
+    if (concepts.length === 0 && (!mindMap || !mindMap.concepts)) {
+      setConceptsError('No concepts available to normalize. Please extract concepts first.');
+      return;
+    }
+
+    setNormalizing(true);
+    setConceptsError(null);
+    
+    try {
+      const graphToNormalize = {
+        concepts: concepts.length > 0 ? concepts : (mindMap?.concepts || []),
+        relationships: mindMap?.relationships || []
+      };
+
+      console.log('🔄 Normalizing graph with', graphToNormalize.concepts.length, 'concepts');
+      
+      const response = await API.post('/ai/normalize-graph', graphToNormalize);
+      
+      if (response.data?.success) {
+        setNormalizedGraph(response.data.graph);
+        console.log('✅ Graph normalized:', response.data.stats);
+      }
+    } catch (error) {
+      console.error('Error normalizing graph:', error);
+      setConceptsError('Failed to normalize graph. Please try again.');
+    } finally {
+      setNormalizing(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div className="glass-card" style={{ padding: '24px' }}>
@@ -334,6 +1186,17 @@ function DocumentParserSection({ document, analysis, documentId }) {
                 >
                   {mindMapLoading ? 'Building mind map…' : 'Generate mind map (save)'}
                 </button>
+                {(concepts.length > 0 || (mindMap && mindMap.concepts)) && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap' }}
+                    onClick={handleNormalizeGraph}
+                    disabled={normalizing}
+                  >
+                    {normalizing ? 'Normalizing…' : '✨ Normalize Graph'}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -613,6 +1476,190 @@ function DocumentParserSection({ document, analysis, documentId }) {
         </div>
       )}
 
+      {/* Normalized Graph Results */}
+      {normalizedGraph && (
+        <div className="glass-card" style={{ padding: '20px', marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h3 style={{ fontSize: '15px', margin: 0, color: 'var(--primary-color)' }}>
+              ✨ Normalized Knowledge Graph
+            </h3>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '11px', padding: '4px 8px' }}
+              onClick={() => setNormalizedGraph(null)}
+            >
+              Hide
+            </button>
+          </div>
+          
+          {/* Statistics */}
+          {normalizedGraph.stats && (
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gap: '12px', 
+              marginBottom: '16px',
+              padding: '14px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              borderRadius: '8px',
+              border: '1px solid rgba(34, 197, 94, 0.3)'
+            }}>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Original Concepts</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                  {normalizedGraph.stats.originalConceptCount}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Normalized Concepts</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#22c55e' }}>
+                  {normalizedGraph.stats.normalizedConceptCount}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Concepts Merged</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#60a5fa' }}>
+                  -{normalizedGraph.stats.conceptReduction}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Original Relationships</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                  {normalizedGraph.stats.originalRelationshipCount}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Normalized Relationships</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#22c55e' }}>
+                  {normalizedGraph.stats.normalizedRelationshipCount}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Relationships Cleaned</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#60a5fa' }}>
+                  -{normalizedGraph.stats.relationshipReduction}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Normalized Concepts */}
+          {normalizedGraph.concepts && normalizedGraph.concepts.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{ fontSize: '14px', marginBottom: '10px', color: 'var(--primary-color)' }}>
+                📚 Normalized Concepts ({normalizedGraph.concepts.length})
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto' }}>
+                {normalizedGraph.concepts.map((concept, idx) => (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      padding: '12px', 
+                      background: 'rgba(255,255,255,0.03)', 
+                      border: '1px solid rgba(99, 102, 241, 0.3)',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <span style={{ 
+                        fontSize: '13px', 
+                        fontWeight: '600',
+                        color: 'var(--primary-color)'
+                      }}>
+                        {concept.name}
+                      </span>
+                      <span style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        background: 'rgba(99, 102, 241, 0.2)',
+                        borderRadius: '3px',
+                        color: 'rgba(255,255,255,0.8)'
+                      }}>
+                        {concept.type}
+                      </span>
+                    </div>
+                    
+                    {concept.definition && (
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+                        {concept.definition}
+                      </div>
+                    )}
+                    
+                    {concept.mergedFrom && concept.mergedFrom.length > 0 && (
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: 'rgba(255,255,255,0.6)',
+                        padding: '6px 8px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        borderRadius: '4px',
+                        marginTop: '6px'
+                      }}>
+                        <strong>Merged from:</strong> {concept.mergedFrom.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Normalized Relationships */}
+          {normalizedGraph.relationships && normalizedGraph.relationships.length > 0 && (
+            <div>
+              <h4 style={{ fontSize: '14px', marginBottom: '10px', color: 'var(--primary-color)' }}>
+                🔗 Normalized Relationships ({normalizedGraph.relationships.length})
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+                {normalizedGraph.relationships.map((rel, idx) => {
+                  const typeColors = {
+                    depends_on: '#fbbf24',
+                    related_to: '#60a5fa',
+                    contrasts_with: '#f87171',
+                    causes: '#a78bfa',
+                    caused_by: '#fb923c',
+                    example_of: '#34d399',
+                    part_of: '#38bdf8',
+                    parent_child: '#22c55e'
+                  };
+                  
+                  return (
+                    <div 
+                      key={idx}
+                      style={{ 
+                        padding: '10px', 
+                        background: 'rgba(255,255,255,0.02)', 
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--primary-color)' }}>
+                          {rel.source}
+                        </span>
+                        <span style={{
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          background: typeColors[rel.type] || 'rgba(99, 102, 241, 0.3)',
+                          borderRadius: '3px',
+                          color: '#fff'
+                        }}>
+                          {rel.type.replace(/_/g, ' ')}
+                        </span>
+                        <span style={{ fontWeight: '600', color: 'var(--primary-color)' }}>
+                          {rel.target}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {activeExplanation && (
         <div className="glass-card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -737,7 +1784,8 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {[
             { id: 'research-abstract', icon: '📝', label: 'Document Parser' },
-            { id: 'research-methodology', icon: '🔬', label: 'Mind Map' }
+            { id: 'research-methodology', icon: '🔬', label: 'Mind Map' },
+            { id: 'image-gallery', icon: '🖼️', label: 'Images & Tables' }
           ].map(section => (
             <button
               key={section.id}
@@ -760,6 +1808,8 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '30px' }}>
         {activeSection === 'research-abstract' ? (
           <DocumentParserSection document={docData} analysis={analysis} documentId={documentId} />
+        ) : activeSection === 'image-gallery' ? (
+          <ImageGallerySection document={docData} analysis={analysis} documentId={documentId} />
         ) : (
           <>
             <div className="glass-card" style={{ padding: '30px', marginBottom: '24px' }}>

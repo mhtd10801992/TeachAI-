@@ -127,11 +127,75 @@ const WebAnalyzer = () => {
           {/* Image Analysis Card */}
           <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
             <h4 style={{ fontSize: '0.9rem', fontWeight: '600', marginBottom: '6px', color: '#374151' }}>
-              🖼️ Visuals
+              🖼️ Visuals {result.images && result.images.length > 0 && `(${result.images.length} image${result.images.length !== 1 ? 's' : ''})`}
             </h4>
-            <div style={{ fontSize: '12px', lineHeight: '1.4', color: '#4b5563', whiteSpace: 'pre-line' }}>
-              {result.imageAnalysis}
-            </div>
+            
+            {/* Display extracted images with thumbnails */}
+            {result.images && result.images.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {result.images.map((img, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    gap: '10px',
+                    padding: '8px',
+                    background: 'rgba(99, 102, 241, 0.05)',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(99, 102, 241, 0.1)'
+                  }}>
+                    {/* Image thumbnail */}
+                    {img.imageUrl && (
+                      <div style={{ flexShrink: 0 }}>
+                        <img
+                          src={img.imageUrl}
+                          alt={img.caption || `Image ${idx + 1}`}
+                          style={{
+                            width: '80px',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '4px',
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => window.open(img.imageUrl, '_blank')}
+                          title="Click to view full size"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Image details */}
+                    <div style={{ flex: 1, fontSize: '11px' }}>
+                      <div style={{ fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                        {img.caption || `Image ${img.imageIndex || idx + 1}`}
+                        {img.pageNumber && ` (Page ${img.pageNumber})`}
+                      </div>
+                      <div style={{ color: '#6b7280', lineHeight: '1.4' }}>
+                        {img.description || 'No description available'}
+                      </div>
+                      {img.dimensions && (
+                        <div style={{ color: '#9ca3af', marginTop: '4px', fontSize: '10px' }}>
+                          📐 {img.dimensions}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                <div style={{ 
+                  fontSize: '11px', 
+                  color: '#6b7280',
+                  padding: '8px',
+                  background: 'rgba(34, 197, 94, 0.05)',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(34, 197, 94, 0.2)'
+                }}>
+                  💡 <strong>Tip:</strong> Save to history to access the full Images & Tables gallery with advanced AI analysis features.
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', lineHeight: '1.4', color: '#4b5563', whiteSpace: 'pre-line' }}>
+                {result.imageAnalysis || 'No images found in this document.'}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -20,6 +20,11 @@ const LOCAL_STORAGE = {
   MINDMAP: './data/mindmap'
 };
 
+// Cache for document list
+let documentsCache = null;
+let cacheTimestamp = null;
+const CACHE_DURATION = 30000; // 30 seconds
+
 // Initialize Firebase Admin (if not already initialized)
 let firebaseApp;
 let bucket;
@@ -137,9 +142,92 @@ export const getMindMapFromFirebase = async (documentId) => {
   }
 };
 
+// List all saved mind maps
+export const listMindMapsFromFirebase = async () => {
+  try {
+    if (useFirebase && bucket) {
+      // Firebase Storage
+      const [files] = await bucket.getFiles({
+        prefix: FIREBASE_PATHS.MINDMAP
+      });
+      
+      const mindMaps = [];
+      
+      for (const file of files) {
+        if (file.name.endsWith('.json')) {
+          try {
+            const [content] = await file.download();
+            const mindMapData = JSON.parse(content.toString());
+            
+            // Return summary info
+            mindMaps.push({
+              id: mindMapData.id,
+              type: mindMapData.type,
+              createdAt: mindMapData.createdAt,
+              totalDocuments: mindMapData.totalDocuments,
+              documentTitles: mindMapData.documentTitles,
+              categories: mindMapData.categories,
+              metadata: mindMapData.metadata
+            });
+          } catch (error) {
+            console.error(`Error loading mind map ${file.name}:`, error);
+          }
+        }
+      }
+      
+      mindMaps.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      console.log(`Loaded ${mindMaps.length} mind maps from Firebase`);
+      return mindMaps;
+    } else {
+      // Local Storage Fallback
+      await initializeLocalStorage();
+      const mindMaps = [];
+      
+      try {
+        const files = await fs.readdir(LOCAL_STORAGE.MINDMAP);
+        
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            try {
+              const filePath = path.join(LOCAL_STORAGE.MINDMAP, file);
+              const content = await fs.readFile(filePath, 'utf8');
+              const mindMapData = JSON.parse(content);
+              
+              mindMaps.push({
+                id: mindMapData.id,
+                type: mindMapData.type,
+                createdAt: mindMapData.createdAt,
+                totalDocuments: mindMapData.totalDocuments,
+                documentTitles: mindMapData.documentTitles,
+                categories: mindMapData.categories,
+                metadata: mindMapData.metadata
+              });
+            } catch (error) {
+              console.error(`Error loading mind map ${file}:`, error);
+            }
+          }
+        }
+        
+        mindMaps.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        console.log(`Loaded ${mindMaps.length} mind maps from local storage`);
+        return mindMaps;
+      } catch (error) {
+        console.log('No local mind maps found, starting fresh');
+        return [];
+      }
+    }
+  } catch (error) {
+    console.error('Error listing mind maps:', error);
+    return [];
+  }
+};
+
 // Save document metadata to Firebase Storage or local fallback
 export const saveDocumentToFirebase = async (documentData) => {
   try {
+    // Invalidate cache since we're adding a new document
+    invalidateDocumentsCache();
+    
     if (useFirebase && bucket) {
       // Firebase Storage
       const documentId = documentData.document.id;
@@ -255,54 +343,73 @@ export const saveUploadedFileToFirebase = async (file, documentId) => {
 };
 
 // Load all documents from Firebase Storage or local fallback
-export const loadDocumentsFromFirebase = async () => {
+export const loadDocumentsFromFirebase = async (useCache = true) => {
   try {
+    // Check cache first
+    if (useCache && documentsCache && cacheTimestamp && (Date.now() - cacheTimestamp < CACHE_DURATION)) {
+      console.log(`📦 Returning ${documentsCache.length} documents from cache`);
+      return documentsCache;
+    }
+    
     if (useFirebase && bucket) {
       // Firebase Storage
       const [files] = await bucket.getFiles({
         prefix: FIREBASE_PATHS.DOCUMENTS
       });
       
-      const documents = [];
-      
-      for (const file of files) {
-        if (file.name.endsWith('.json')) {
+      // Load documents in parallel for speed
+      const documentPromises = files
+        .filter(file => file.name.endsWith('.json'))
+        .map(async (file) => {
           try {
             const [content] = await file.download();
-            const documentData = JSON.parse(content.toString());
-            documents.push(documentData);
+            return JSON.parse(content.toString());
           } catch (error) {
             console.error(`Error loading document ${file.name}:`, error);
+            return null;
           }
-        }
-      }
+        });
+      
+      const documents = (await Promise.all(documentPromises)).filter(doc => doc !== null);
       
       documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      console.log(`Loaded ${documents.length} documents from Firebase`);
+      console.log(`✅ Loaded ${documents.length} documents from Firebase`);
+      
+      // Update cache
+      documentsCache = documents;
+      cacheTimestamp = Date.now();
+      
       return documents;
     } else {
       // Local Storage Fallback
       await initializeLocalStorage();
-      const documents = [];
       
       try {
         const files = await fs.readdir(LOCAL_STORAGE.DOCUMENTS);
         
-        for (const file of files) {
-          if (file.endsWith('.json')) {
+        // Load documents in parallel
+        const documentPromises = files
+          .filter(file => file.endsWith('.json'))
+          .map(async (file) => {
             try {
               const filePath = path.join(LOCAL_STORAGE.DOCUMENTS, file);
               const content = await fs.readFile(filePath, 'utf8');
-              const documentData = JSON.parse(content);
-              documents.push(documentData);
+              return JSON.parse(content);
             } catch (error) {
               console.error(`Error loading document ${file}:`, error);
+              return null;
             }
-          }
-        }
+          });
+        
+        const documents = (await Promise.all(documentPromises)).filter(doc => doc !== null);
         
         documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        console.log(`Loaded ${documents.length} documents from local storage`);
+        console.log(`✅ Loaded ${documents.length} documents from local storage`);
+        
+        // Update cache
+        documentsCache = documents;
+        cacheTimestamp = Date.now();
+        
         return documents;
       } catch (error) {
         console.log('No local documents found, starting fresh');
@@ -315,8 +422,16 @@ export const loadDocumentsFromFirebase = async () => {
   }
 };
 
+// Invalidate documents cache (call this when documents are added/updated/deleted)
+export const invalidateDocumentsCache = () => {
+  documentsCache = null;
+  cacheTimestamp = null;
+  console.log('🗑️ Documents cache invalidated');
+};
+
 // Delete document from Firebase Storage or Local Storage
 export const deleteDocumentFromFirebase = async (documentId) => {
+  invalidateDocumentsCache();
   try {
     if (useFirebase && bucket) {
       // Firebase Storage

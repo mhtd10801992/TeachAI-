@@ -9,6 +9,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { saveUploadedFileToFirebase } from './firebaseStorageService.js';
+import { extractImagesFromPDF } from './pdfImageExtractor.js';
+import { describeImageWithAI } from './imageAIService.js';
 
 // Setup require for CommonJS modules in ESM environment
 const require = createRequire(import.meta.url);
@@ -63,7 +65,6 @@ export const analyzeWebUrl = async (url) => {
             originalname: fileData.filename
         });
         fileData.storagePath = firebaseResult.storagePath; // Save storage path
-        await fs.unlink(tempUploadPath); // Clean up temp file
         console.log(`✅ PDF saved to Firebase Storage at ${fileData.storagePath}`);
         // --- END SAVE PDF ---
 
@@ -82,7 +83,79 @@ export const analyzeWebUrl = async (url) => {
             textContent = "Text extraction skipped. Full analysis provided by AI.";
         }
 
-        images = [{ src: "https://placehold.co/600x400?text=PDF+Visual+Content", alt: "PDF Content Analysis", context: "Visual content is analyzed by AI below." }];
+        // 2. Extract and analyze images from PDF
+        console.log('🖼️ Extracting images from PDF...');
+        let imageAnalysisResults = [];
+        try {
+          const extractedImages = await extractImagesFromPDF(tempUploadPath);
+          console.log(`📸 Found ${extractedImages.length} embedded images in PDF`);
+
+          if (extractedImages.length > 0) {
+            console.log('🤖 Analyzing embedded images with AI...');
+            // Analyze first 30 images (increased limit for better coverage)
+            const imagesToAnalyze = extractedImages.slice(0, 30);
+            imageAnalysisResults = await Promise.all(
+              imagesToAnalyze.map(async (imageData, index) => {
+                try {
+                  console.log(`🖼️ Analyzing image ${index + 1}, size: ${imageData.buffer.length} bytes`);
+                  const description = await describeImageWithAI(imageData.buffer);
+                  // Convert image buffer to base64 for frontend display
+                  const base64Image = imageData.buffer.toString('base64');
+                  const imageUrl = `data:image/png;base64,${base64Image}`;
+
+                  return {
+                    imageIndex: index + 1,
+                    type: imageData.type,
+                    pageNumber: imageData.pageNumber,
+                    description: description,
+                    size: imageData.buffer.length,
+                    dimensions: `${imageData.width}x${imageData.height}`,
+                    imageUrl: imageUrl,
+                    imageData: imageUrl, // Add this for compatibility with frontend
+                    caption: `Image ${index + 1} from page ${imageData.pageNumber}`,
+                    canDelete: true
+                  };
+                } catch (error) {
+                  console.error(`❌ Image ${index + 1} analysis failed:`, error.message);
+                  // Still include the image even if AI analysis fails
+                  try {
+                    const base64Image = imageData.buffer.toString('base64');
+                    const imageUrl = `data:image/png;base64,${base64Image}`;
+                    return {
+                      imageIndex: index + 1,
+                      type: imageData.type,
+                      pageNumber: imageData.pageNumber,
+                      description: `Image analysis failed: ${error.message}`,
+                      size: imageData.buffer.length,
+                      dimensions: `${imageData.width}x${imageData.height}`,
+                      imageUrl: imageUrl,
+                      imageData: imageUrl,
+                      caption: `Image ${index + 1} from page ${imageData.pageNumber}`,
+                      error: error.message
+                    };
+                  } catch (convertError) {
+                    console.error(`❌ Image conversion also failed:`, convertError.message);
+                    return null;
+                  }
+                }
+              })
+            );
+            // Filter out any null results
+            imageAnalysisResults = imageAnalysisResults.filter(r => r !== null);
+            console.log(`✅ Analyzed ${imageAnalysisResults.length} images from PDF`);
+          } else {
+            console.log('⚠️ No embedded images found in PDF');
+          }
+        } catch (imageError) {
+          console.error('❌ Image extraction error:', imageError.message);
+          imageAnalysisResults = [];
+        }
+
+        // Store image results for later use
+        images = imageAnalysisResults;
+        
+        // Clean up temp file
+        await fs.unlink(tempUploadPath);
 
       } catch (pdfError) {
         if (pdfError.response && pdfError.response.status === 403) {
@@ -150,10 +223,11 @@ export const analyzeWebUrl = async (url) => {
       url,
       title: fileData.filename,
       summary,
-      imageAnalysis,
+      imageAnalysis: isPdf ? `Extracted and analyzed ${images.length} images from PDF` : imageAnalysis,
       scholarlyData,
       textContent,
-      images: images.slice(0, 20),
+      images: images, // Return all images without slice limit
+      imageCount: images.length,
       mock: false,
       // Pass file data back to the controller
       fileData: fileData

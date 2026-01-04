@@ -1,4 +1,4 @@
-import { processWithAI, extractActionableSteps, extractMermaidGraph, extractDOEFactors, explainSectionInContext, extractConceptGraph, inferConceptRelationships } from "../services/aiService.js";
+import { processWithAI, extractActionableSteps, extractMermaidGraph, extractDOEFactors, explainSectionInContext, extractConceptGraph, inferConceptRelationships, normalizeConceptGraph, explainConcept, compareConcepts, explainReasoningChain, generateQuiz } from "../services/aiService.js";
 import { getDocumentFromFirebase, saveMindMapToFirebase, getMindMapFromFirebase } from "../services/firebaseStorageService.js";
 
 export const aiController = {
@@ -75,11 +75,18 @@ export const aiController = {
       // Layer 2 — concept extraction
       const { concepts } = await extractConceptGraph(text);
 
+      // Ensure all concepts have an 'id' field (use name as ID)
+      const conceptsWithIds = (concepts || []).map(c => ({
+        ...c,
+        id: c.id || c.name,
+        name: c.name || c.id
+      }));
+
       // Layer 3 — relationship building
-      const { relationships } = await inferConceptRelationships(concepts, text);
+      const { relationships } = await inferConceptRelationships(conceptsWithIds, text);
 
       // Step 7 — ground concepts in chunks when available
-      const conceptsWithChunks = (concepts || []).map((concept) => {
+      const conceptsWithChunks = (conceptsWithIds || []).map((concept) => {
         if (!analysisChunks.length || !concept?.name) return concept;
 
         const nameLower = concept.name.toLowerCase();
@@ -160,6 +167,41 @@ export const aiController = {
         res.status(500).json({ success: false, error: 'Failed to extract concept graph' });
       }
     },
+
+  // Normalize a concept graph (merge duplicates, clean up)
+  async normalizeGraph(req, res) {
+    try {
+      const { concepts, relationships } = req.body || {};
+
+      if (!Array.isArray(concepts)) {
+        return res.status(400).json({ success: false, error: 'concepts array is required' });
+      }
+
+      const rawGraph = {
+        concepts,
+        relationships: relationships || []
+      };
+
+      const normalized = await normalizeConceptGraph(rawGraph);
+
+      res.json({
+        success: true,
+        graph: normalized,
+        stats: {
+          original: normalized.originalCount,
+          normalized: normalized.normalizedCount,
+          removed: {
+            concepts: (normalized.originalCount?.concepts || 0) - (normalized.normalizedCount?.concepts || 0),
+            relationships: (normalized.originalCount?.relationships || 0) - (normalized.normalizedCount?.relationships || 0)
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Graph normalization error:', error.message);
+      res.status(500).json({ success: false, error: 'Failed to normalize graph' });
+    }
+  },
+
   async testAI(req, res) {
     try {
       const prompt = "Say 'ok' if you are working.";
@@ -412,6 +454,211 @@ export const aiController = {
       res.status(500).json({
         success: false,
         message: 'Failed to generate section explanation',
+        error: error.message
+      });
+    }
+  },
+
+  // LLM-powered concept explanation
+  async explainGraphConcept(req, res) {
+    try {
+      const { concept, neighbors } = req.body;
+
+      if (!concept || !concept.label) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'concept with label is required' 
+        });
+      }
+
+      const explanation = await explainConcept({ 
+        concept, 
+        neighbors: neighbors || [] 
+      });
+
+      res.json({
+        success: true,
+        explanation,
+        concept: concept.label
+      });
+    } catch (error) {
+      console.error('Concept explanation error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to explain concept',
+        error: error.message
+      });
+    }
+  },
+
+  // LLM-powered concept comparison
+  async compareGraphConcepts(req, res) {
+    try {
+      const { conceptA, conceptB } = req.body;
+
+      if (!conceptA || !conceptA.label || !conceptB || !conceptB.label) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Two concepts with labels are required' 
+        });
+      }
+
+      const comparison = await compareConcepts({ conceptA, conceptB });
+
+      res.json({
+        success: true,
+        comparison,
+        concepts: [conceptA.label, conceptB.label]
+      });
+    } catch (error) {
+      console.error('Concept comparison error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to compare concepts',
+        error: error.message
+      });
+    }
+  },
+
+  // LLM-powered reasoning chain explanation
+  async explainGraphReasoningChain(req, res) {
+    try {
+      const { concepts } = req.body;
+
+      if (!Array.isArray(concepts) || concepts.length < 2) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Array of at least 2 concepts is required' 
+        });
+      }
+
+      const explanation = await explainReasoningChain({ concepts });
+
+      res.json({
+        success: true,
+        explanation,
+        conceptChain: concepts.map(c => c.label)
+      });
+    } catch (error) {
+      console.error('Reasoning chain explanation error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to explain reasoning chain',
+        error: error.message
+      });
+    }
+  },
+
+  // LLM-powered quiz generation
+  async generateGraphQuiz(req, res) {
+    try {
+      const { concept } = req.body;
+
+      if (!concept || !concept.label) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'concept with label is required' 
+        });
+      }
+
+      const quiz = await generateQuiz({ concept });
+
+      res.json({
+        success: true,
+        quiz,
+        concept: concept.label
+      });
+    } catch (error) {
+      console.error('Quiz generation error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate quiz',
+        error: error.message
+      });
+    }
+  },
+
+  // Analyze selected images with AI and explain their relationship to document
+  async analyzeSelectedImages(req, res) {
+    try {
+      const { documentId, imageIndices } = req.body;
+
+      if (!documentId) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'documentId is required' 
+        });
+      }
+
+      if (!Array.isArray(imageIndices) || imageIndices.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Array of imageIndices is required' 
+        });
+      }
+
+      // Get document from storage
+      const stored = await getDocumentFromFirebase(documentId);
+      if (!stored || !stored.document) {
+        return res.status(404).json({ success: false, message: 'Document not found' });
+      }
+
+      const doc = stored.document;
+      const analysis = doc.analysis || {};
+      const allImages = analysis.imageAnalysis || [];
+
+      // Get text summary for context
+      const text = doc.fullText || doc.text || doc.rawText || analysis.originalText || '';
+      const summary = analysis.summary || '';
+      const context = summary || (text.length > 2000 ? text.substring(0, 2000) + '...' : text);
+
+      // Analyze each selected image
+      const results = {};
+      for (const index of imageIndices) {
+        if (index < 0 || index >= allImages.length) {
+          console.warn(`Image index ${index} out of range, skipping`);
+          continue;
+        }
+
+        const image = allImages[index];
+        
+        try {
+          // Use OpenAI to explain how this image relates to the document
+          const explanation = await explainConcept({
+            concept: {
+              label: image.caption || `Image ${index + 1}`,
+              description: image.description || 'Extracted image from document'
+            },
+            additionalContext: `This image was extracted from a document. Document context: ${context.substring(0, 500)}...`
+          });
+
+          results[index] = {
+            explanation: explanation.explanation || 'Analysis complete',
+            relationship: explanation.relationship || 'This image is related to the document content',
+            caption: image.caption,
+            description: image.description
+          };
+
+          console.log(`✅ Analyzed image ${index + 1}: ${image.caption || 'Untitled'}`);
+        } catch (imageError) {
+          console.error(`Error analyzing image ${index}:`, imageError);
+          results[index] = {
+            explanation: 'Failed to analyze this image',
+            error: imageError.message
+          };
+        }
+      }
+
+      res.json({
+        success: true,
+        results,
+        analyzedCount: Object.keys(results).length
+      });
+    } catch (error) {
+      console.error('Image analysis error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to analyze images',
         error: error.message
       });
     }

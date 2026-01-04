@@ -17,6 +17,7 @@ import documentRoutes from "./routes/documents.js";
 import aiRoutes from "./routes/ai.js";
 import webRoutes from "./routes/web.js";
 import metadataRoutes from "./routes/metadata.js";
+import mindMapRoutes from "./routes/mindmap.js";
 import { initializeFirebaseStorage } from "./services/firebaseStorageService.js";
 import { initializeDocumentCache } from "./controllers/documentController.js";
 
@@ -46,6 +47,7 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/web", webRoutes);
 app.use("/api/metadata", metadataRoutes);
+app.use("/api/mindmap", mindMapRoutes);
 
 const startServer = async () => {
   try {

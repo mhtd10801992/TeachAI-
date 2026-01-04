@@ -62,10 +62,15 @@ export const webController = {
                           fullText: analysis.textContent, 
                           highlights: [] 
                       },
+                      originalText: analysis.textContent,
+                      // Add image analysis results in the same format as file upload
+                      imageAnalysis: analysis.images || [],
+                      tables: [],
                       webAnalysis: {
                           imageAnalysis: analysis.imageAnalysis,
                           scholarlyData: analysis.scholarlyData,
-                          images: analysis.images
+                          images: analysis.images,
+                          imageCount: analysis.imageCount || 0
                       }
                   },
                   processingTime: 2000,

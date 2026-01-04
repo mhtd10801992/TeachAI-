@@ -33,20 +33,31 @@ let useFirebase = false;
 try {
   firebaseApp = admin.app();
   useFirebase = true;
+  console.log('✅ Using existing Firebase Admin app');
 } catch (error) {
   try {
-    // Try to load service account key if it exists
-    const serviceAccountPath = path.join(process.cwd(), 'config', 'firebase-admin-key.json');
-    const credential = admin.credential.cert(serviceAccountPath);
-    firebaseApp = admin.initializeApp({
-      ...firebaseConfig,
-      credential
-    });
-    useFirebase = true;
-    console.log('✅ Firebase Admin initialized with service account');
-  } catch (keyError) {
-    console.log('⚠️ Firebase credentials not found, using local storage fallback');
-    console.log('Error:', keyError.message);
+    // In production (App Hosting), use Application Default Credentials
+    if (process.env.NODE_ENV === 'production') {
+      firebaseApp = admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+        storageBucket: firebaseConfig.storageBucket
+      });
+      useFirebase = true;
+      console.log('✅ Firebase Admin initialized with Application Default Credentials');
+    } else {
+      // Development: Try to load service account key
+      const serviceAccountPath = path.join(process.cwd(), 'config', 'firebase-admin-key.json');
+      const credential = admin.credential.cert(serviceAccountPath);
+      firebaseApp = admin.initializeApp({
+        ...firebaseConfig,
+        credential
+      });
+      useFirebase = true;
+      console.log('✅ Firebase Admin initialized with service account');
+    }
+  } catch (initError) {
+    console.log('⚠️ Firebase initialization failed, using local storage fallback');
+    console.log('Error:', initError.message);
     useFirebase = false;
   }
 }

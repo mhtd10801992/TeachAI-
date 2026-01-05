@@ -5,9 +5,15 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-// Register canvas globally for pdf-parse to use
-import { createCanvas } from 'canvas';
-global.Canvas = createCanvas;
+// Register canvas globally for pdf-parse to use (optional)
+try {
+  const canvasModule = await import('canvas');
+  global.Canvas = canvasModule.createCanvas;
+  console.log('✅ Canvas loaded - PDF image extraction enabled');
+} catch (err) {
+  console.warn('⚠️  Canvas not available - PDF image extraction disabled');
+  global.Canvas = null;
+}
 
 // Updated: 2026-01-05 - OpenAI API key secret refreshed
 

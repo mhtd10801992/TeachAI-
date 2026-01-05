@@ -1,13 +1,28 @@
 import fs from 'fs';
 import path from 'path';
 import pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
-import { createCanvas, ImageData } from 'canvas';
+
+// Try to import canvas - if not available, image extraction will be disabled
+let createCanvas, ImageData;
+try {
+  const canvasModule = await import('canvas');
+  createCanvas = canvasModule.createCanvas;
+  ImageData = canvasModule.ImageData;
+} catch (err) {
+  console.warn('⚠️  Canvas not available in pdfImageExtractor');
+  createCanvas = null;
+  ImageData = null;
+}
 
 // Configure PDF.js for Node.js (disable worker)
 pdfjsLib.GlobalWorkerOptions.workerSrc = null;
 
 // Extract images from a PDF file and return them as buffers
 export async function extractImagesFromPDF(pdfPath) {
+  if (!createCanvas) {
+    console.warn('⚠️  Skipping image extraction - canvas not available');
+    return [];
+  }
   try {
     const data = new Uint8Array(fs.readFileSync(pdfPath));
     const loadingTask = pdfjsLib.getDocument({ data });

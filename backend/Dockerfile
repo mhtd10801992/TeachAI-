@@ -1,6 +1,16 @@
 # Use Node.js LTS version
 FROM node:18-alpine
 
+# Install build dependencies for canvas package
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev
+
 # Set working directory
 WORKDIR /app
 
@@ -13,7 +23,10 @@ RUN npm install --production
 # Copy application files
 COPY . .
 
-# Expose port (Cloud Run uses PORT env variable, defaults to 8080)
+# Set environment variable for port (Cloud Run will override with its own PORT)
+ENV PORT=8080
+
+# Expose port (Cloud Run uses PORT env variable)
 EXPOSE 8080
 
 # Health check

@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:4000';
+import API from '../api/api';
 
 // Helper: Call LLM for graph interactions
 const callLLM = async (endpoint, data) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/api/ai/graph/${endpoint}`, data);
+    const response = await API.post(`/ai/graph/${endpoint}`, data);
     return response.data;
   } catch (error) {
     console.error(`LLM call failed (${endpoint}):`, error);

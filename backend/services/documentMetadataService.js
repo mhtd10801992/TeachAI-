@@ -1,14 +1,250 @@
 // Document Metadata Service - Extracts and structures all document information for token-based processing
+import OpenAI from 'openai';
+
+// Initialize OpenAI (if API key is available)
+let openai = null;
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+// ================ EQUATION COMPOSER LAYER ================
+// Step 1: Compose complete equations from metadata
+const composeEquation = (equationMeta) => {
+  const { variables, equation } = equationMeta;
+  
+  // Already has a full equation string
+  if (equation && equation.length > 0) {
+    return equation;
+  }
+  
+  // Try to reconstruct from variables and operators
+  if (variables && variables.length >= 2) {
+    // Simple composition: var1 = var2 + var3...
+    return `${variables[0]} = ${variables.slice(1).join(' + ')}`;
+  }
+  
+  return equation || 'Unknown equation';
+};
+
+// Step 2: Generate meaningful explanation for equation
+const explainEquation = (equation, sentence, variables) => {
+  // Extract relationship type from equation
+  let relationship = 'is calculated from';
+  
+  if (equation.includes('+')) relationship = 'is the sum of';
+  else if (equation.includes('-')) relationship = 'is the difference between';
+  else if (equation.includes('×') || equation.includes('*')) relationship = 'is the product of';
+  else if (equation.includes('÷') || equation.includes('/')) relationship = 'is the ratio of';
+  else if (equation.includes('^')) relationship = 'is raised to the power of';
+  
+  const leftSide = variables && variables.length > 0 ? variables[0] : equation.split('=')[0]?.trim() || 'variable';
+  const rightSide = variables && variables.length > 1 ? variables.slice(1).join(', ') : equation.split('=')[1]?.trim() || 'expression';
+  
+  return {
+    short: `**${leftSide}** ${relationship} ${rightSide}`,
+    context: sentence,
+    mathematical: `The equation **${equation}** defines the relationship between ${variables ? variables.join(', ') : 'variables'}.`
+  };
+};
+
+// Step 3: Generate AI-powered explanation for equation
+const explainEquationWithAI = async (equation, sentence) => {
+  if (!openai) {
+    return explainEquation(equation, sentence, []).mathematical;
+  }
+  
+  try {
+    const prompt = `Explain the mathematical relationship in the equation "${equation}" using this context:
+"${sentence}"
+
+Provide a clear, concise explanation (max 30 words) of what this equation represents and calculates.`;
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 80
+    });
+    
+    return response.choices[0].message.content.trim();
+  } catch (err) {
+    console.error('Error generating AI equation explanation:', err.message);
+    return explainEquation(equation, sentence, []).mathematical;
+  }
+};
+
+// Step 4: Compose and enhance all equations
+const composeAndExplainEquations = async (equations, generateAIExplanations = false) => {
+  if (!equations || equations.length === 0) return [];
+  
+  const composedEquations = [];
+  
+  for (const eq of equations) {
+    const composedEq = composeEquation(eq);
+    const basicExplanation = explainEquation(composedEq, eq.sentence, eq.variables);
+    
+    const enhanced = {
+      ...eq,
+      composedEquation: composedEq,
+      explanation: basicExplanation,
+      displayEquation: formatEquationForDisplay(composedEq)
+    };
+    
+    // Optionally generate AI explanation
+    if (generateAIExplanations && openai) {
+      try {
+        enhanced.aiExplanation = await explainEquationWithAI(composedEq, eq.sentence);
+      } catch (err) {
+        console.error('Error in AI explanation:', err.message);
+      }
+    }
+    
+    composedEquations.push(enhanced);
+  }
+  
+  return composedEquations;
+};
+
+// Step 5: Format equation for MathJax display
+const formatEquationForDisplay = (equation) => {
+  // Convert to LaTeX-style formatting for MathJax
+  let formatted = equation
+    .replace(/\*/g, '\\times')
+    .replace(/\//g, '\\div')
+    .replace(/\^(\d+)/g, '^{$1}')
+    .replace(/\^([A-Za-z])/g, '^{$1}');
+  
+  return formatted;
+};
+
+// ================ END EQUATION COMPOSER LAYER ================
+
+// Step 5: Generate AI explanations for numeric data
+const generateNumericExplanations = async (numericData) => {
+  if (!openai || numericData.length === 0) return numericData;
+  
+  try {
+    // Process in batches to avoid rate limits
+    const batchSize = 5;
+    const results = [];
+    
+    for (let i = 0; i < numericData.length; i += batchSize) {
+      const batch = numericData.slice(i, i + batchSize);
+      
+      // Generate explanations for each item
+      const promises = batch.map(async (item) => {
+        try {
+          const prompt = `Explain what the measurement/number "${item.value}" refers to in this context:\n"${item.sentence}"\n\nProvide a SHORT explanation (max 15 words) of what this number represents.`;
+          
+          const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3,
+            max_tokens: 50
+          });
+          
+          return {
+            ...item,
+            explanation: response.choices[0].message.content.trim()
+          };
+        } catch (err) {
+          console.error('Error generating explanation:', err.message);
+          return { ...item, explanation: 'No explanation available' };
+        }
+      });
+      
+      const batchResults = await Promise.all(promises);
+      results.push(...batchResults);
+      
+      // Small delay between batches
+      if (i + batchSize < numericData.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('Error in batch explanation generation:', error.message);
+    return numericData.map(item => ({ ...item, explanation: 'Explanation unavailable' }));
+  }
+};
+
+// Step 5: Generate AI explanations for equations
+const generateEquationExplanations = async (equations) => {
+  if (!openai || equations.length === 0) return equations;
+  
+  try {
+    const batchSize = 5;
+    const results = [];
+    
+    for (let i = 0; i < equations.length; i += batchSize) {
+      const batch = equations.slice(i, i + batchSize);
+      
+      const promises = batch.map(async (item) => {
+        try {
+          const prompt = `Explain what this scientific equation means: "${item.equation}"\nContext: "${item.sentence}"\n\nProvide a SHORT explanation (max 20 words) of what this equation represents.`;
+          
+          const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3,
+            max_tokens: 60
+          });
+          
+          return {
+            ...item,
+            explanation: response.choices[0].message.content.trim()
+          };
+        } catch (err) {
+          console.error('Error generating equation explanation:', err.message);
+          return { ...item, explanation: 'No explanation available' };
+        }
+      });
+      
+      const batchResults = await Promise.all(promises);
+      results.push(...batchResults);
+      
+      if (i + batchSize < equations.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('Error in equation explanation generation:', error.message);
+    return equations.map(item => ({ ...item, explanation: 'Explanation unavailable' }));
+  }
+};
 
 export const extractDocumentMetadata = async (text, analysis) => {
+  const cleanText = text || '';
+  const sentences = extractSentences(cleanText);
+  const paragraphs = extractParagraphs(cleanText);
+  
+  // Extract numeric and scientific data
+  let numericData = extractNumericData(cleanText, sentences, paragraphs);
+  let equations = extractScientificEquations(cleanText, sentences);
+  
+  // Step 5: Apply Equation Composer Layer (without automatic AI explanations)
+  console.log('🧮 Applying Equation Composer Layer...');
+  equations = await composeAndExplainEquations(equations, false); // without AI explanations (on-demand only)
+  console.log(`✅ Composed ${equations.length} equations with explanations`);
+  
+  // Step 5: Generate AI explanations for numeric data only (optional, only if OpenAI is available)
+  if (openai && numericData.length > 0) {
+    console.log('🤖 Generating AI explanations for numeric data...');
+    numericData = await generateNumericExplanations(numericData);
+    console.log('✅ AI explanations generated for numeric data');
+  }
+  
   const metadata = {
     // Text Structure & Content
     content: {
-      fullText: text,
-      textLength: text.length,
-      wordCount: text.split(/\s+/).filter(w => w.length > 0).length,
-      sentences: extractSentences(text),
-      paragraphs: extractParagraphs(text)
+      fullText: cleanText,
+      textLength: cleanText.length,
+      wordCount: cleanText.split(/\s+/).filter(w => w.length > 0).length,
+      sentences: sentences,
+      paragraphs: paragraphs
     },
 
     // AI Analysis Results
@@ -21,22 +257,319 @@ export const extractDocumentMetadata = async (text, analysis) => {
 
     // Document Structure
     structure: {
-      sections: extractSections(text),
-      headings: extractHeadings(text),
-      keyPhrases: extractKeyPhrases(text, analysis.topics)
+      sections: extractSections(cleanText),
+      headings: extractHeadings(cleanText),
+      keyPhrases: extractKeyPhrases(cleanText, analysis.topics)
     },
 
+    // Numeric and Scientific Data (with Equation Composer enhancements)
+    numericData: numericData,
+    equations: equations,
+
     // Tokens for Processing
-    tokens: generateTokens(text, analysis),
+    tokens: generateTokens(cleanText, analysis),
 
     // Metadata Tags
     tags: extractMetadataTags(analysis),
 
     // Searchable Index
-    index: createSearchIndex(text, analysis)
+    index: createSearchIndex(cleanText, analysis)
   };
 
   return metadata;
+};
+
+// Step 1: Clean text before extraction
+const cleanForMetadata = (text) => {
+  return text
+    .replace(/¶\d+/g, "")        // remove paragraph markers
+    .replace(/§\d+/g, "")        // remove section markers
+    .replace(/\b000\s?[°C|°F]/g, "") // remove 000 °C artifacts
+    .replace(/\b\d{3}\s?[°C|°F]/g, (match) => {
+      // Only remove if it's clearly an artifact (3 digits followed by temp)
+      return match.startsWith('000') ? '' : match;
+    })
+    .replace(/-\s*\n/g, "")      // fix hyphenated line breaks
+    .replace(/\n+/g, " ")        // flatten broken lines
+    .replace(/\s{2,}/g, " ")     // collapse multiple spaces
+    .trim();
+};
+
+// Step 3: Semantic validation - Check if measurement is valid
+const isValidMeasurement = (sentence) => {
+  // Must contain scientific/technical nouns
+  return /\b(temperature|pressure|speed|velocity|mass|weight|load|force|volume|density|rate|efficiency|height|width|length|distance|time|duration|power|energy|frequency|wavelength|concentration|pH|voltage|current|resistance|capacity|flow|stress|strain|torque|momentum|acceleration)\b/i.test(sentence);
+};
+
+// Step 3: Semantic validation - Check if equation structure is valid
+const isValidEquationStructure = (sentence) => {
+  // Must contain operators, equals, or Greek letters
+  return /[=+\-×÷/]/.test(sentence) || /[α-ωΑ-Ω]/.test(sentence) || /\^/.test(sentence);
+};
+
+// Step 3: Semantic validation - Check if variable is valid
+const isValidVariable = (token) => {
+  // Single letter to 3 letters, or Greek letters, or known combinations
+  return /^[A-Za-z]{1,3}$/.test(token) || 
+         /[α-ωΑ-Ω]/.test(token) ||
+         /^(PV|RT|ΔH|ΔG|ΔS|kT)$/.test(token);
+};
+
+// Step 2 & 3: Extract numeric data with validation (from sentences only)
+const extractNumericData = (text, sentences, paragraphs) => {
+  const numericData = [];
+  const cleanedText = cleanForMetadata(text);
+  
+  // Regex patterns for different numeric types
+  const patterns = {
+    temperature: /(\d+\.?\d*)\s*[°]?[CF]\b/gi,
+    percentage: /(\d+\.?\d*)\s*%/g,
+    currency: /[$€£¥₹]\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/g,
+    scientificNotation: /(\d+\.?\d*)\s*[×x]\s*10\^?(-?\d+)/gi,
+    measurement: /(\d+\.?\d*)\s*(mm|cm|m|km|kg|g|mg|tons?|ml|l|gal|mph|kmh?|kph|Hz|MHz|GHz|V|mV|A|mA|W|kW|MW|J|kJ|Pa|kPa|MPa|bar|psi|mol|M|N|kN)/gi,
+    ratio: /(\d+\.?\d*)\s*:\s*(\d+\.?\d*)\b/g,
+    range: /(\d+\.?\d*)\s*[-–—]\s*(\d+\.?\d*)\b/g,
+    decimal: /\b(\d+\.\d+)\b/g
+  };
+  
+  // Step 2: Process each sentence (not raw text)
+  sentences.forEach((sentence, sentenceIdx) => {
+    const cleanSentence = cleanForMetadata(sentence);
+    
+    // Skip empty or too short sentences
+    if (cleanSentence.length < 10) return;
+    
+    // Find paragraph index and text
+    let paragraphIdx = 0;
+    let paragraphText = '';
+    for (let i = 0; i < paragraphs.length; i++) {
+      if (paragraphs[i].text.includes(sentence.substring(0, 50))) {
+        paragraphIdx = i;
+        paragraphText = paragraphs[i].text;
+        break;
+      }
+    }
+    
+    // Extract temperature measurements (special handling)
+    patterns.temperature.lastIndex = 0;
+    let match;
+    while ((match = patterns.temperature.exec(cleanSentence)) !== null) {
+      // Step 3: Validate - must have scientific context
+      if (isValidMeasurement(cleanSentence)) {
+        numericData.push({
+          value: match[0],
+          numericValue: parseFloat(match[1]),
+          unit: match[0].includes('C') ? '°C' : '°F',
+          type: 'temperature',
+          sentenceIndex: sentenceIdx,
+          paragraphIndex: paragraphIdx,
+          sentence: cleanSentence,
+          paragraph: paragraphText,
+          context: cleanSentence
+        });
+      }
+    }
+    
+    // Extract percentages
+    patterns.percentage.lastIndex = 0;
+    while ((match = patterns.percentage.exec(cleanSentence)) !== null) {
+      numericData.push({
+        value: match[0],
+        numericValue: parseFloat(match[1]),
+        type: 'percentage',
+        sentenceIndex: sentenceIdx,
+        paragraphIndex: paragraphIdx,
+        sentence: cleanSentence,
+        paragraph: paragraphText,
+        context: cleanSentence
+      });
+    }
+    
+    // Extract currency
+    patterns.currency.lastIndex = 0;
+    while ((match = patterns.currency.exec(cleanSentence)) !== null) {
+      numericData.push({
+        value: match[0],
+        numericValue: parseFloat(match[1].replace(/,/g, '')),
+        type: 'currency',
+        sentenceIndex: sentenceIdx,
+        paragraphIndex: paragraphIdx,
+        sentence: cleanSentence,
+        paragraph: paragraphText,
+        context: cleanSentence
+      });
+    }
+    
+    // Extract scientific notation
+    patterns.scientificNotation.lastIndex = 0;
+    while ((match = patterns.scientificNotation.exec(cleanSentence)) !== null) {
+      if (isValidMeasurement(cleanSentence)) {
+        numericData.push({
+          value: match[0],
+          numericValue: parseFloat(match[1]) * Math.pow(10, parseInt(match[2])),
+          type: 'scientific_notation',
+          sentenceIndex: sentenceIdx,
+          paragraphIndex: paragraphIdx,
+          sentence: cleanSentence,
+          paragraph: paragraphText,
+          context: cleanSentence
+        });
+      }
+    }
+    
+    // Extract measurements (with validation)
+    patterns.measurement.lastIndex = 0;
+    while ((match = patterns.measurement.exec(cleanSentence)) !== null) {
+      if (isValidMeasurement(cleanSentence)) {
+        numericData.push({
+          value: match[0],
+          numericValue: parseFloat(match[1]),
+          unit: match[2],
+          type: 'measurement',
+          sentenceIndex: sentenceIdx,
+          paragraphIndex: paragraphIdx,
+          sentence: cleanSentence,
+          paragraph: paragraphText,
+          context: cleanSentence
+        });
+      }
+    }
+    
+    // Extract ratios
+    patterns.ratio.lastIndex = 0;
+    while ((match = patterns.ratio.exec(cleanSentence)) !== null) {
+      // Avoid extracting time formats (e.g., "3:45")
+      if (!/\d+:\d{2}/.test(match[0])) {
+        numericData.push({
+          value: match[0],
+          numericValue: parseFloat(match[1]) / parseFloat(match[2]),
+          type: 'ratio',
+          sentenceIndex: sentenceIdx,
+          paragraphIndex: paragraphIdx,
+          sentence: cleanSentence,
+          paragraph: paragraphText,
+          context: cleanSentence
+        });
+      }
+    }
+    
+    // Extract ranges
+    patterns.range.lastIndex = 0;
+    while ((match = patterns.range.exec(cleanSentence)) !== null) {
+      // Must have units or scientific context
+      if (isValidMeasurement(cleanSentence) || /\d+\.?\d*\s*-\s*\d+\.?\d*\s*(years?|months?|days?|hours?|minutes?|seconds?|%)/i.test(match[0] + cleanSentence.substring(match.index + match[0].length, match.index + match[0].length + 20))) {
+        numericData.push({
+          value: match[0],
+          min: parseFloat(match[1]),
+          max: parseFloat(match[2]),
+          type: 'range',
+          sentenceIndex: sentenceIdx,
+          paragraphIndex: paragraphIdx,
+          sentence: cleanSentence,
+          paragraph: paragraphText,
+          context: cleanSentence
+        });
+      }
+    }
+  });
+  
+  // Remove duplicates
+  const uniqueData = [];
+  const seen = new Set();
+  numericData.forEach(item => {
+    const key = `${item.value}-${item.sentenceIndex}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueData.push(item);
+    }
+  });
+  
+  return uniqueData;
+};
+
+// Step 2 & 3: Extract scientific equations with validation (from sentences only)
+const extractScientificEquations = (text, sentences) => {
+  const equations = [];
+  
+  // Patterns for equation detection
+  const equationPatterns = [
+    // Variable = expression (e.g., σ = F/A, E = mc²)
+    /([A-Za-zΔσμπρθλφψωαβγδεζηκνξστυχΩΣΠΛΦΨ][A-Za-z0-9_]*)\s*=\s*([^.!?\n;,]{1,50})/g,
+    // Expression with operators and variables
+    /([A-Za-zΔσμπρθλφψωαβγδεζηκνξστυχΩΣΠΛΦΨ][A-Za-z0-9_]*)\s*[+\-×÷*/]\s*([A-Za-zΔσμπρθλφψωαβγδεζηκνξστυχΩΣΠΛΦΨ][A-Za-z0-9_]*)/g
+  ];
+  
+  // Step 2: Process each sentence (not raw text)
+  sentences.forEach((sentence, sentenceIdx) => {
+    const cleanSentence = cleanForMetadata(sentence);
+    
+    // Step 3: Validate - must have equation structure
+    if (!isValidEquationStructure(cleanSentence)) return;
+    
+    // Skip if sentence is too short or contains common non-equation patterns
+    if (cleanSentence.length < 5) return;
+    if (/^(No|Yes|Action|Fuel|Cost|Name|Type|Date|Time|Page)\s*[-:]/i.test(cleanSentence)) return;
+    
+    equationPatterns.forEach(pattern => {
+      pattern.lastIndex = 0;
+      let match;
+      
+      while ((match = pattern.exec(cleanSentence)) !== null) {
+        const fullEquation = match[0].trim();
+        
+        // Skip if it's just a simple number comparison or assignment
+        if (/^\d+\s*=\s*\d+/.test(fullEquation)) continue;
+        if (fullEquation.length < 3 || fullEquation.length > 100) continue;
+        
+        // Extract variables (letters, Greek letters, subscripts)
+        const variablePattern = /[A-Za-zΔσμπρθλφψωαβγδεζηκνξστυχΩΣΠΛΦΨ][A-Za-z0-9_]*/g;
+        const allVariables = fullEquation.match(variablePattern) || [];
+        
+        // Step 3: Validate each variable
+        const validVariables = allVariables.filter(v => isValidVariable(v));
+        
+        // Must have at least 2 valid variables
+        if (validVariables.length < 2) continue;
+        
+        // Check features
+        const hasOperators = /[+\-×÷*/=^]/.test(fullEquation);
+        const hasGreekLetters = /[ΔσμπρθλφψωαβγδεζηκνξστυχΩΣΠΛΦΨ]/.test(fullEquation);
+        const hasSuperscripts = /\^|\u00B2|\u00B3/.test(fullEquation);
+        const hasNumbers = /\d/.test(fullEquation);
+        
+        // Must have operators or Greek letters or superscripts
+        if (!hasOperators && !hasGreekLetters && !hasSuperscripts) continue;
+        
+        equations.push({
+          equation: fullEquation,
+          variables: [...new Set(validVariables)],
+          sentenceIndex: sentenceIdx,
+          sentence: cleanSentence,
+          context: cleanSentence,
+          features: {
+            hasGreekLetters,
+            hasSuperscripts,
+            hasNumbers,
+            variableCount: validVariables.length
+          }
+        });
+      }
+    });
+  });
+  
+  // Remove duplicates
+  const uniqueEquations = [];
+  const seen = new Set();
+  
+  equations.forEach(eq => {
+    const key = eq.equation.replace(/\s/g, '').toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueEquations.push(eq);
+    }
+  });
+  
+  return uniqueEquations;
 };
 
 // Extract sentences from text

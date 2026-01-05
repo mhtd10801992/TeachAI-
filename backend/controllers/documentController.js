@@ -109,10 +109,25 @@ export const getAllDocuments = async (req, res) => {
     
     console.log(`📊 Fetching documents - Cache has ${documentHistory.length} documents`);
     
+    // Filter out any invalid documents
+    const validDocuments = documentHistory.filter(doc => {
+      try {
+        return doc && doc.createdAt && doc.document;
+      } catch (e) {
+        console.error('Invalid document found:', e);
+        return false;
+      }
+    });
+    
     // Sort by most recent first
-    let sortedDocuments = documentHistory.sort((a, b) => 
-      new Date(b.createdAt) - new Date(a.createdAt)
-    );
+    let sortedDocuments = validDocuments.sort((a, b) => {
+      try {
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      } catch (e) {
+        console.error('Error sorting documents:', e);
+        return 0;
+      }
+    });
     
     // Filter by category if specified
     if (category && category !== 'all') {
@@ -121,7 +136,7 @@ export const getAllDocuments = async (req, res) => {
     }
     
     // Get unique categories for the response
-    const categories = [...new Set(documentHistory.map(doc => doc.category || 'General'))];
+    const categories = [...new Set(validDocuments.map(doc => doc.category || 'General'))];
     
     console.log(`📤 Sending ${sortedDocuments.length} documents to frontend`);
     
@@ -133,7 +148,12 @@ export const getAllDocuments = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching documents:', error);
-    res.status(500).json({ error: "Failed to fetch documents" });
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ 
+      error: "Failed to fetch documents",
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

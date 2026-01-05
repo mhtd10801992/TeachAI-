@@ -124,161 +124,180 @@ function App() {
 
       {/* Main Content */}
       <div style={{ padding: '0 20px', paddingBottom: '40px' }}>
-        {currentView === 'upload' ? (
-          <div className="animate-slideInLeft">
-            <div className="glass-card" style={{
-              padding: '30px',
-              borderRadius: '24px',
-              marginBottom: '30px'
-            }}>
-              <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                <h2 style={{ 
-                  fontSize: '32px', 
-                  marginBottom: '12px',
-                  background: 'var(--primary-gradient)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  📄 Document & Web Analysis
-                </h2>
-                <p style={{ 
-                  color: 'var(--text-secondary)', 
-                  fontSize: '16px',
-                  maxWidth: '600px',
-                  margin: '0 auto',
-                  lineHeight: '1.8'
-                }}>
-                  Upload documents or enter web/PDF URLs for intelligent AI analysis. 
-                  Our system extracts key information, summarizes content, and identifies topics.
-                </p>
+        {/* Upload & Web Analysis */}
+        <div style={{ display: currentView === 'upload' ? 'block' : 'none' }} className="animate-slideInLeft">
+          <div className="glass-card" style={{
+            padding: '30px',
+            borderRadius: '24px',
+            marginBottom: '30px'
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+              <h2 style={{ 
+                fontSize: '32px', 
+                marginBottom: '12px',
+                background: 'var(--primary-gradient)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                📄 Document & Web Analysis
+              </h2>
+              <p style={{ 
+                color: 'var(--text-secondary)', 
+                fontSize: '16px',
+                maxWidth: '600px',
+                margin: '0 auto',
+                lineHeight: '1.8'
+              }}>
+                Upload documents or enter web/PDF URLs for intelligent AI analysis. 
+                Our system extracts key information, summarizes content, and identifies topics.
+              </p>
+            </div>
+
+            {/* Combined Interface */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+              
+              {/* Left Column: File Upload */}
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
+                  📤 Upload File
+                </h3>
+                <FileUploader onViewHistory={(docId) => {
+                  setSelectedDocumentForReview(docId);
+                  setCurrentView('review');
+                }} />
               </div>
 
-              {/* Combined Interface */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-                
-                {/* Left Column: File Upload */}
-                <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
-                    📤 Upload File
-                  </h3>
-                  <FileUploader onViewHistory={(docId) => {
-                    setSelectedDocumentForReview(docId);
-                    setCurrentView('review');
-                  }} />
-                </div>
-
-                {/* Right Column: Web Analysis */}
-                <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
-                    🌐 Web / PDF Link
-                  </h3>
-                  <WebAnalyzer />
-                </div>
-
+              {/* Right Column: Web Analysis */}
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
+                  🌐 Web / PDF Link
+                </h3>
+                <WebAnalyzer />
               </div>
 
             </div>
 
-            <div className="glass-card" style={{
-              padding: '25px',
-              borderRadius: '20px',
+          </div>
+
+          <div className="glass-card" style={{
+            padding: '25px',
+            borderRadius: '20px',
+          }}>
+            <h3 style={{ 
+              marginBottom: '20px', 
+              color: 'var(--text-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
             }}>
-              <h3 style={{ 
-                marginBottom: '20px', 
-                color: 'var(--text-primary)',
+              <span style={{
+                width: '30px',
+                height: '30px',
+                background: 'var(--secondary-gradient)',
+                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px'
+                justifyContent: 'center'
               }}>
-                <span style={{
-                  width: '30px',
-                  height: '30px',
-                  background: 'var(--secondary-gradient)',
-                  borderRadius: '8px',
+                🔄
+              </span>
+              Processing Workflow
+            </h3>
+            <div style={{ display: 'grid', gap: '15px' }}>
+              {[
+                { icon: '📤', title: 'Upload / Input', desc: 'Secure document upload or web URL analysis' },
+                { icon: '🧠', title: 'AI Analysis', desc: 'Extract text, summarize, identify topics and entities' },
+                { icon: '📊', title: 'Confidence Check', desc: 'Low confidence items flagged for review' },
+                { icon: '👤', title: 'Human Validation', desc: 'Review and edit AI analysis if needed' },
+                { icon: '🔗', title: 'Vectorization', desc: 'Convert approved content to searchable vectors' },
+                { icon: '🔍', title: 'Smart Search', desc: 'Ask natural language questions about documents' }
+              ].map((step, index) => (
+                <div key={index} style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  gap: '15px',
+                  padding: '15px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                  e.currentTarget.style.transform = 'translateX(5px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                  e.currentTarget.style.transform = 'translateX(0px)';
                 }}>
-                  🔄
-                </span>
-                Processing Workflow
-              </h3>
-              <div style={{ display: 'grid', gap: '15px' }}>
-                {[
-                  { icon: '📤', title: 'Upload / Input', desc: 'Secure document upload or web URL analysis' },
-                  { icon: '🧠', title: 'AI Analysis', desc: 'Extract text, summarize, identify topics and entities' },
-                  { icon: '📊', title: 'Confidence Check', desc: 'Low confidence items flagged for review' },
-                  { icon: '👤', title: 'Human Validation', desc: 'Review and edit AI analysis if needed' },
-                  { icon: '🔗', title: 'Vectorization', desc: 'Convert approved content to searchable vectors' },
-                  { icon: '🔍', title: 'Smart Search', desc: 'Ask natural language questions about documents' }
-                ].map((step, index) => (
-                  <div key={index} style={{
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'var(--primary-gradient)',
+                    borderRadius: '10px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '15px',
-                    padding: '15px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                    e.currentTarget.style.transform = 'translateX(5px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                    e.currentTarget.style.transform = 'translateX(0px)';
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    flexShrink: 0
                   }}>
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      background: 'var(--primary-gradient)',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '18px',
-                      flexShrink: 0
-                    }}>
-                      {step.icon}
+                    {step.icon}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                      {index + 1}. {step.title}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                        {index + 1}. {step.title}
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                        {step.desc}
-                      </div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                      {step.desc}
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
-        ) : currentView === 'history' ? (
+        </div>
+        
+        {/* Document History */}
+        <div style={{ display: currentView === 'history' ? 'block' : 'none' }}>
           <DocumentHistory onReview={(docId) => {
             setSelectedDocumentForReview(docId);
             setCurrentView('review');
           }} />
-        ) : currentView === 'chat' ? (
+        </div>
+        
+        {/* AI Chat */}
+        <div style={{ display: currentView === 'chat' ? 'block' : 'none' }}>
           <AIChat documents={documents} />
-        ) : currentView === 'review' && selectedDocumentForReview ? (
-          <ComprehensiveDocumentReview 
-            documentId={selectedDocumentForReview} 
-            onClose={() => {
-              setCurrentView('history');
-              setSelectedDocumentForReview(null);
-            }}
-          />
-        ) : currentView === 'mindmap' ? (
-          <MindMapCanvas />
-        ) : currentView === 'status' ? (
-          <SystemStatus />
-        ) : (
-          <ValidationDashboard />
+        </div>
+        
+        {/* Comprehensive Review */}
+        {selectedDocumentForReview && (
+          <div style={{ display: currentView === 'review' ? 'block' : 'none' }}>
+            <ComprehensiveDocumentReview 
+              documentId={selectedDocumentForReview} 
+              onClose={() => {
+                setCurrentView('history');
+                setSelectedDocumentForReview(null);
+              }}
+            />
+          </div>
         )}
+        
+        {/* Mind Map */}
+        <div style={{ display: currentView === 'mindmap' ? 'block' : 'none' }}>
+          <MindMapCanvas />
+        </div>
+        
+        {/* System Status */}
+        <div style={{ display: currentView === 'status' ? 'block' : 'none' }}>
+          <SystemStatus />
+        </div>
+        
+        {/* Validation Dashboard */}
+        <div style={{ display: currentView === 'validation' ? 'block' : 'none' }}>
+          <ValidationDashboard />
+        </div>
       </div>
     </div>
   );

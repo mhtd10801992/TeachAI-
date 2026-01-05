@@ -2,7 +2,26 @@
 import OpenAI from 'openai';
 import { loadDocumentsFromFirebase, saveMindMapToFirebase, getMindMapFromFirebase, listMindMapsFromFirebase } from '../services/firebaseStorageService.js';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy initialization of OpenAI - will be initialized on first use
+let openai = null;
+let openaiInitialized = false;
+
+const getOpenAI = () => {
+  if (!openaiInitialized) {
+    openaiInitialized = true;
+    if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here') {
+      try {
+        openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        console.log('✅ OpenAI initialized for Mind Map generation');
+      } catch (error) {
+        console.error('❌ Failed to initialize OpenAI:', error.message);
+      }
+    } else {
+      console.warn('⚠️ OpenAI API key not configured for Mind Map generation');
+    }
+  }
+  return openai;
+};
 
 // Categories for document classification
 const CATEGORIES = [
@@ -27,6 +46,14 @@ export const categorizeAndGenerateMindMaps = async (req, res) => {
 
     if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
       return res.status(400).json({ error: 'Please provide an array of document IDs' });
+    }
+
+    // Check if OpenAI is configured (lazy initialize)
+    const openaiInstance = getOpenAI();
+    if (!openaiInstance) {
+      return res.status(500).json({ 
+        error: 'OpenAI is not configured. Please set OPENAI_API_KEY in the .env file.' 
+      });
     }
 
     console.log(`📚 Processing ${documentIds.length} documents for categorization...`);
@@ -106,7 +133,7 @@ Respond in JSON format:
   }
 }`;
 
-      const response = await openai.chat.completions.create({
+      const response = await openaiInstance.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 500,
@@ -213,10 +240,11 @@ ${allExistingRelationships.slice(0, 30).map(r => `- ${r.source} --[${r.type || '
 Instructions:
 1. Use the EXISTING CONCEPTS above (don't create new ones)
 2. Select 8-15 most relevant concepts for "${category}"
-3. Use EXISTING RELATIONSHIPS where available
-4. Add new relationships only if needed to connect concepts
-5. Group related concepts together
-6. Assign importance based on relevance to ${category}
+3. For each concept, identify 2-5 key factors (sub-properties, aspects, or details)
+4. Use EXISTING RELATIONSHIPS where available
+5. Add new relationships only if needed to connect concepts
+6. Group related concepts together
+7. Assign importance based on relevance to ${category}
 
 Respond in JSON format:
 {
@@ -233,7 +261,14 @@ Respond in JSON format:
       "type": "concept|process|entity|etc",
       "relatedDocuments": ["doc-id-1"],
       "importance": 9,
-      "sourceDoc": "doc-id"
+      "sourceDoc": "doc-id",
+      "factors": [
+        {
+          "factor": "Key aspect or detail",
+          "value": "Specific value or description",
+          "importance": 7
+        }
+      ]
     }
   ],
   "relationships": [
@@ -247,7 +282,7 @@ Respond in JSON format:
   ]
 }`;
 
-      const mindMapResponse = await openai.chat.completions.create({
+      const mindMapResponse = await openaiInstance.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: conceptsPrompt }],
         max_tokens: 1500,
@@ -298,7 +333,7 @@ Respond with JSON:
   ]
 }`;
 
-    const relResponse = await openai.chat.completions.create({
+    const relResponse = await openaiInstance.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: categoryRelationshipsPrompt }],
       max_tokens: 800,
@@ -490,6 +525,14 @@ export const analyzeFactor = async (req, res) => {
 
     console.log(`🔍 Analyzing factor "${factorKey}" for concept "${concept.name}" in category "${category}"`);
 
+    // Check if OpenAI is configured
+    const openaiInstance = getOpenAI();
+    if (!openaiInstance) {
+      return res.status(500).json({ 
+        error: 'OpenAI is not configured. Please set OPENAI_API_KEY in the .env file.' 
+      });
+    }
+
     // Build context for AI
     const relatedRelationships = relationships.filter(
       rel => rel.from === concept.name || rel.to === concept.name
@@ -523,7 +566,7 @@ Please provide:
 
 Keep the response clear, concise (3-5 sentences), and focused on actionable insights.`;
 
-    const response = await openai.chat.completions.create({
+    const response = await openaiInstance.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 300,

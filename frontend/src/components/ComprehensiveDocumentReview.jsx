@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import API from '../api/api';
 import ConceptGraphViewer from './ConceptGraphViewer';
+import EquationExplorer from './EquationExplorer';
 
 // Research Paper Style Components
 const ResearchTable = ({ title, headers, rows, caption }) => (
@@ -218,7 +219,10 @@ function ImageGallerySection({ document, analysis, documentId }) {
     setIsDragging(true);
     setDragStartY(e.clientY);
     setDragStartHeight(imageHeight);
-    e.preventDefault();
+    // Only prevent default for non-passive events
+    if (e.cancelable) {
+      e.preventDefault();
+    }
   };
 
   // Add event listeners for drag
@@ -1785,7 +1789,8 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
           {[
             { id: 'research-abstract', icon: '📝', label: 'Document Parser' },
             { id: 'research-methodology', icon: '🔬', label: 'Mind Map' },
-            { id: 'image-gallery', icon: '🖼️', label: 'Images & Tables' }
+            { id: 'image-gallery', icon: '🖼️', label: 'Images & Tables' },
+            { id: 'equations-numbers', icon: '🧮', label: 'Equations & Numbers' }
           ].map(section => (
             <button
               key={section.id}
@@ -1810,6 +1815,18 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
           <DocumentParserSection document={docData} analysis={analysis} documentId={documentId} />
         ) : activeSection === 'image-gallery' ? (
           <ImageGallerySection document={docData} analysis={analysis} documentId={documentId} />
+        ) : activeSection === 'equations-numbers' ? (
+          <div className="glass-card" style={{ padding: '30px' }}>
+            <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>🧮</span>
+              Extracted Equations & Numeric Data
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '30px', lineHeight: '1.6' }}>
+              This section displays all mathematical equations, scientific formulas, and numeric data 
+              (percentages, measurements, currency, ratios, etc.) extracted from the document.
+            </p>
+            <EquationExplorer documentId={documentId} />
+          </div>
         ) : (
           <>
             <div className="glass-card" style={{ padding: '30px', marginBottom: '24px' }}>

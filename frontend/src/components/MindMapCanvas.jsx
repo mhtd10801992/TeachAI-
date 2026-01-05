@@ -30,7 +30,7 @@ export default function MindMapCanvas() {
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [categorizedData, setCategorizedData] = useState(null);
   const [categorizationLoading, setCategorizationLoading] = useState(false);
-  const [viewMode, setViewMode] = useState('simple'); // 'simple' or 'multi-doc'
+  const [viewMode, setViewMode] = useState('multi-doc'); // Only multi-doc mode
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showRelationships, setShowRelationships] = useState(true);
   
@@ -156,7 +156,7 @@ export default function MindMapCanvas() {
 
   // Canvas interaction handlers
   const handleWheel = (e) => {
-    e.preventDefault();
+    // Remove preventDefault to avoid passive event listener warning
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setCanvasZoom(prev => Math.max(0.3, Math.min(3, prev * delta)));
   };
@@ -222,6 +222,71 @@ export default function MindMapCanvas() {
     setCanvasPan({ x: 0, y: 0 });
   };
 
+  // Download mind map as JSON
+  const downloadMindMapJSON = () => {
+    if (!categorizedData) {
+      alert('No mind map data to download');
+      return;
+    }
+    
+    const dataStr = JSON.stringify(categorizedData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mindmap-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Generate and download Mermaid code
+  const downloadMermaidCode = () => {
+    if (!categorizedData) {
+      alert('No mind map data to download');
+      return;
+    }
+
+    let mermaidCode = 'graph TD\n';
+    mermaidCode += '    Root[Mind Map]\n';
+    
+    // Add categories
+    categorizedData.categories?.forEach((cat, catIdx) => {
+      const catId = `Cat${catIdx}`;
+      mermaidCode += `    Root --> ${catId}["${cat}"]\n`;
+      
+      // Add concepts for this category
+      const concepts = categorizedData.categoryMindMaps?.[cat]?.concepts || [];
+      concepts.forEach((concept, conIdx) => {
+        const conceptId = `${catId}_C${conIdx}`;
+        mermaidCode += `    ${catId} --> ${conceptId}["${concept.name}"]\n`;
+        
+        // Add factors for this concept (limit to avoid overcrowding)
+        const factors = concept.factors?.slice(0, 3) || [];
+        factors.forEach((factor, factIdx) => {
+          const factorId = `${conceptId}_F${factIdx}`;
+          mermaidCode += `    ${conceptId} --> ${factorId}["${factor.factor}"]\n`;
+        });
+      });
+    });
+    
+    // Add styling
+    mermaidCode += '\n    classDef categoryNode fill:#3b82f6,stroke:#1e40af,color:#fff\n';
+    mermaidCode += '    classDef conceptNode fill:#10b981,stroke:#059669,color:#fff\n';
+    mermaidCode += '    classDef factorNode fill:#f59e0b,stroke:#d97706,color:#fff\n';
+    
+    const dataBlob = new Blob([mermaidCode], { type: 'text/plain' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mindmap-mermaid-${Date.now()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleAddManualNode = () => {
     const id = `manual-${manualNodes.length + 1}`;
     const angle = (manualNodes.length / Math.max(1, processes.length + manualNodes.length)) * Math.PI * 2;
@@ -274,51 +339,8 @@ export default function MindMapCanvas() {
       <div className="glass-card" style={{ width: '420px', padding: '20px', overflowY: 'auto' }}>
         <h2 style={{ marginBottom: '10px' }}>🧠 Mind Map Lab</h2>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '15px' }}>
-          Choose between simple text analysis or multi-document categorization with AI.
+          Multi-document categorization and AI-powered mind map generation.
         </p>
-
-        {/* Mode Toggle */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '8px', 
-          marginBottom: '20px',
-          padding: '4px',
-          background: 'rgba(0,0,0,0.3)',
-          borderRadius: '8px'
-        }}>
-          <button
-            onClick={() => setViewMode('simple')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              borderRadius: '6px',
-              border: 'none',
-              background: viewMode === 'simple' ? 'var(--primary-gradient)' : 'transparent',
-              color: 'white',
-              fontSize: '13px',
-              cursor: 'pointer',
-              fontWeight: viewMode === 'simple' ? '600' : '400'
-            }}
-          >
-            📝 Simple Mode
-          </button>
-          <button
-            onClick={() => setViewMode('multi-doc')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              borderRadius: '6px',
-              border: 'none',
-              background: viewMode === 'multi-doc' ? 'var(--primary-gradient)' : 'transparent',
-              color: 'white',
-              fontSize: '13px',
-              cursor: 'pointer',
-              fontWeight: viewMode === 'multi-doc' ? '600' : '400'
-            }}
-          >
-            📚 Multi-Doc Mode
-          </button>
-        </div>
         
         {/* Load Saved Mind Maps Button */}
         <button
@@ -416,168 +438,8 @@ export default function MindMapCanvas() {
           </div>
         )}
 
-        {viewMode === 'simple' ? (
-          <>
-            {/* Simple Mode - Original functionality */}
-            <label style={{ fontSize: '13px', marginBottom: '4px', display: 'block' }}>Root topic / title</label>
-            <input
-              type="text"
-              value={rootLabel}
-              onChange={e => setRootLabel(e.target.value)}
-              style={{
-                width: '100%',
-                marginBottom: '12px',
-                padding: '8px 10px',
-                borderRadius: '6px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(0,0,0,0.25)',
-                color: 'var(--text-primary)',
-                fontSize: '14px'
-              }}
-            />
-
-            <label style={{ fontSize: '13px', marginBottom: '4px', display: 'block' }}>Source text / notes</label>
-            <textarea
-              value={sourceText}
-              onChange={e => setSourceText(e.target.value)}
-              placeholder="Paste a paragraph, meeting notes, or learning content here..."
-              style={{
-                width: '100%',
-                minHeight: '120px',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(0,0,0,0.3)',
-                color: 'var(--text-primary)',
-                fontSize: '13px',
-                marginBottom: '10px',
-                resize: 'vertical'
-              }}
-            />
-
-        <button
-          className="btn btn-primary"
-          onClick={handleGenerateFromAI}
-          disabled={loading}
-          style={{ width: '100%', marginBottom: '10px' }}
-        >
-          {loading ? 'Analyzing with AI…' : '✨ Extract Learning Flows'}
-        </button>
-
-        <button
-          className="btn btn-secondary"
-          onClick={handleAddManualNode}
-          style={{ width: '100%', marginBottom: '16px' }}
-        >
-          ➕ Add Manual Node
-        </button>
-
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px', marginTop: '8px' }}>
-          <h4 style={{ fontSize: '13px', marginBottom: '8px' }}>📊 Learning Flow Size</h4>
-          {chartData.length === 0 ? (
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Run AI extraction to see chart.</div>
-          ) : (
-            <div>
-              {chartData.map((d, idx) => (
-                <div key={idx} style={{ marginBottom: '6px' }}>
-                  <div style={{ fontSize: '12px', marginBottom: '2px' }}>{d.label}</div>
-                  <div style={{
-                    height: '6px',
-                    background: 'rgba(255,255,255,0.08)',
-                    borderRadius: '4px',
-                    overflow: 'hidden'
-                  }}>
-                    <div
-                      style={{
-                        width: `${Math.min(100, d.value * 15)}%`,
-                        height: '100%',
-                        background: 'var(--primary-gradient)'
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {selectedNode && (
-          <div style={{
-            marginTop: '14px',
-            paddingTop: '12px',
-            borderTop: '1px solid rgba(255,255,255,0.08)'
-          }}>
-            <h4 style={{ fontSize: '13px', marginBottom: '6px' }}>📝 Selected Node</h4>
-            <input
-              type="text"
-              value={selectedNode.title}
-              onChange={e => {
-                const value = e.target.value;
-                if (selectedNode.id.startsWith('manual-')) {
-                  handleNodeTitleChange(selectedNode.id, value);
-                  setSelectedNode(prev => prev ? { ...prev, title: value } : prev);
-                }
-              }}
-              style={{
-                width: '100%',
-                marginBottom: '6px',
-                padding: '6px 8px',
-                borderRadius: '6px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(0,0,0,0.3)',
-                color: 'var(--text-primary)',
-                fontSize: '13px'
-              }}
-            />
-            {selectedNode.id.startsWith('manual-') && (
-              <textarea
-                value={selectedNode.description || ''}
-                onChange={e => {
-                  const value = e.target.value;
-                  handleNodeDescriptionChange(selectedNode.id, value);
-                  setSelectedNode(prev => prev ? { ...prev, description: value } : prev);
-                }}
-                placeholder="Notes or key points for this node..."
-                style={{
-                  width: '100%',
-                  minHeight: '60px',
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(0,0,0,0.3)',
-                  color: 'var(--text-primary)',
-                  fontSize: '12px',
-                  resize: 'vertical'
-                }}
-              />
-            )}
-
-            {selectedNode.steps && selectedNode.steps.length > 0 && (
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ fontSize: '12px', marginBottom: '4px' }}>Key steps:</div>
-                <ul style={{ paddingLeft: '18px', margin: 0, fontSize: '12px' }}>
-                  {selectedNode.steps.slice(0, 4).map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {selectedNode.outcomes && selectedNode.outcomes.length > 0 && (
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ fontSize: '12px', marginBottom: '4px' }}>Expected outcomes:</div>
-                <ul style={{ paddingLeft: '18px', margin: 0, fontSize: '12px' }}>
-                  {selectedNode.outcomes.slice(0, 3).map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-          </>
-        ) : (
-          <>
+        {/* Multi-Document Categorization Mode */}
+        <>
             {/* Multi-Document Categorization Mode */}
             <div style={{ marginBottom: '15px' }}>
               <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>📚 Select Documents</h4>
@@ -766,14 +628,19 @@ export default function MindMapCanvas() {
                 </div>
               </>
             )}
-          </>
-        )}
+        </>
       </div>
 
       {/* Canvas area */}
       <div 
         className="glass-card" 
-        style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'grab' }}
+        style={{ 
+          flex: 1, 
+          position: 'relative', 
+          overflow: 'hidden', 
+          cursor: isPanning ? 'grabbing' : 'grab',
+          touchAction: 'none' // Prevents passive touch events
+        }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -831,6 +698,42 @@ export default function MindMapCanvas() {
           >
             Reset
           </button>
+          {categorizedData && (
+            <>
+              <button
+                onClick={downloadMindMapJSON}
+                title="Download mind map as JSON"
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(0,0,0,0.7)',
+                  color: '#10b981',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                📥 JSON
+              </button>
+              <button
+                onClick={downloadMermaidCode}
+                title="Download Mermaid diagram code"
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(0,0,0,0.7)',
+                  color: '#3b82f6',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                📊 Mermaid
+              </button>
+            </>
+          )}
           <div style={{
             padding: '8px 12px',
             borderRadius: '6px',
@@ -847,10 +750,10 @@ export default function MindMapCanvas() {
           className="canvas-background"
           style={{ 
             position: 'absolute', 
-            inset: 0, 
-            backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0)', 
-            backgroundSize: '24px 24px', 
-            opacity: 0.4 
+            inset: 0,
+            backgroundColor: '#ffffff',
+            backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(0,0,0,0.15) 1.5px, transparent 0)', 
+            backgroundSize: '30px 30px'
           }} 
         />
         
@@ -1010,9 +913,25 @@ export default function MindMapCanvas() {
                       {/* Category node */}
                       <div
                         onMouseDown={(e) => handleNodeMouseDown(e, catNodeId)}
-                        onClick={() => {
-                          setSelectedCategory(cat);
-                          setShowAllCategories(false);
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selectedCategory === cat) {
+                            // Clicking same category: return to full view
+                            setSelectedCategory(null);
+                            setShowAllCategories(true);
+                          } else {
+                            // Clicking new category: show its details
+                            setSelectedCategory(cat);
+                            setShowAllCategories(false);
+                            // Debug: Log concept structure
+                            console.log('🔍 Selected category:', cat);
+                            console.log('🔍 Concepts for category:', concepts);
+                            concepts.forEach((concept, idx) => {
+                              console.log(`  Concept ${idx}:`, concept);
+                              console.log(`  Has factors?`, concept.factors);
+                              console.log(`  All keys:`, Object.keys(concept));
+                            });
+                          }
                         }}
                         style={{
                           position: 'absolute',
@@ -1065,6 +984,21 @@ export default function MindMapCanvas() {
                       
                       {/* Subconcepts around category */}
                       {concepts.map((concept, conceptIdx) => {
+                        // Get factors - either from factors array or convert other properties
+                        let conceptFactors = concept.factors || [];
+                        
+                        // If no factors array, create factors from other concept properties
+                        if (!conceptFactors || conceptFactors.length === 0) {
+                          const excludedKeys = ['id', 'name', 'description', 'type', 'relatedDocuments', 'importance', 'sourceDoc', 'category', 'catIdx', 'conceptIdx'];
+                          conceptFactors = Object.entries(concept)
+                            .filter(([key]) => !excludedKeys.includes(key))
+                            .map(([key, value]) => ({
+                              factor: key,
+                              value: typeof value === 'object' ? JSON.stringify(value) : String(value)
+                            }))
+                            .slice(0, 5); // Limit to 5 factors
+                        }
+                        
                         const totalConcepts = concepts.length;
                         const conceptAngle = categoryAngle + ((conceptIdx - (totalConcepts - 1) / 2) * (0.8 / Math.max(1, totalConcepts - 1)));
                         const conceptRadius = categoryRadius + 15;
@@ -1144,6 +1078,95 @@ export default function MindMapCanvas() {
                                 opacity="0.5"
                               />
                             </svg>
+                            
+                            {/* Show factors when category is selected */}
+                            {selectedCategory === cat && conceptFactors && conceptFactors.length > 0 && (
+                              conceptFactors.map((factor, factorIdx) => {
+                                const totalFactors = conceptFactors.length;
+                                const factorSpread = Math.min(1.2, totalFactors * 0.15);
+                                const factorAngle = conceptAngle + ((factorIdx - (totalFactors - 1) / 2) * (factorSpread / Math.max(1, totalFactors - 1)));
+                                const factorRadius = conceptRadius + 12;
+                                const defaultFactorTop = 50 + factorRadius * Math.sin(factorAngle);
+                                const defaultFactorLeft = 50 + factorRadius * Math.cos(factorAngle);
+                                
+                                const factorNodeId = `${cat}-concept-${conceptIdx}-factor-${factorIdx}`;
+                                const factorPosition = nodePositions[factorNodeId] || { top: defaultFactorTop, left: defaultFactorLeft };
+                                const factorTop = factorPosition.top;
+                                const factorLeft = factorPosition.left;
+                                
+                                return (
+                                  <div key={`${cat}-concept-${conceptIdx}-factor-${factorIdx}`}>
+                                    <div
+                                      onMouseDown={(e) => handleNodeMouseDown(e, factorNodeId)}
+                                      style={{
+                                        position: 'absolute',
+                                        top: `${factorTop}%`,
+                                        left: `${factorLeft}%`,
+                                        transform: 'translate(-50%, -50%)',
+                                        minWidth: '80px',
+                                        maxWidth: '110px',
+                                        padding: '6px 8px',
+                                        borderRadius: '6px',
+                                        background: 'rgba(255,255,255,0.95)',
+                                        color: '#1e293b',
+                                        border: `1.5px solid ${CATEGORY_COLORS[cat] || 'rgba(148,163,184,0.5)'}`,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                        cursor: draggedNode === factorNodeId ? 'grabbing' : 'grab',
+                                        zIndex: draggedNode === factorNodeId ? 100 : 2,
+                                        fontSize: '9px',
+                                        transition: draggedNode === factorNodeId ? 'none' : 'all 0.2s',
+                                        userSelect: 'none'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (!draggedNode) {
+                                          e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.08)';
+                                          e.currentTarget.style.zIndex = '7';
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (!draggedNode) {
+                                          e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
+                                          e.currentTarget.style.zIndex = '2';
+                                        }
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 600, fontSize: '9px', marginBottom: '2px' }}>
+                                        {factor.factor}
+                                      </div>
+                                      {factor.value && (
+                                        <div style={{ fontSize: '8px', opacity: 0.7 }}>
+                                          {String(factor.value).slice(0, 30)}{String(factor.value).length > 30 ? '...' : ''}
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Line from concept to factor */}
+                                    <svg
+                                      style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: '100%',
+                                        pointerEvents: 'none',
+                                        zIndex: 1
+                                      }}
+                                    >
+                                      <line
+                                        x1={`${conceptLeft}%`}
+                                        y1={`${conceptTop}%`}
+                                        x2={`${factorLeft}%`}
+                                        y2={`${factorTop}%`}
+                                        stroke={CATEGORY_COLORS[cat] || 'rgba(148,163,184,0.4)'}
+                                        strokeWidth="1"
+                                        strokeDasharray="2,2"
+                                        opacity="0.4"
+                                      />
+                                    </svg>
+                                  </div>
+                                );
+                              })
+                            )}
                           </div>
                         );
                       })}
@@ -1437,6 +1460,60 @@ export default function MindMapCanvas() {
                       )}
                     </div>
                   ))}
+              </div>
+            </div>
+          )}
+
+          {/* Factors - Dedicated section for factors array */}
+          {expandedConcept.factors && expandedConcept.factors.length > 0 && (
+            <div style={{ marginBottom: '15px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(226,232,240,0.8)', marginBottom: '6px' }}>
+                🔍 Factors
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {expandedConcept.factors.map((factor, idx) => (
+                  <div key={idx} style={{
+                    padding: '10px',
+                    borderRadius: '8px',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', color: 'rgba(167, 243, 208, 0.95)' }}>
+                      {factor.factor}
+                    </div>
+                    {factor.value && (
+                      <div style={{ fontSize: '10px', color: 'rgba(226,232,240,0.8)', lineHeight: '1.4' }}>
+                        {typeof factor.value === 'object' ? JSON.stringify(factor.value, null, 2) : String(factor.value)}
+                      </div>
+                    )}
+                    {factor.importance && (
+                      <div style={{ 
+                        marginTop: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <div style={{ 
+                          flex: 1, 
+                          height: '4px', 
+                          background: 'rgba(255,255,255,0.1)', 
+                          borderRadius: '2px',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            width: `${factor.importance * 10}%`,
+                            height: '100%',
+                            background: 'rgba(16, 185, 129, 0.8)',
+                            transition: 'width 0.3s'
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '9px', color: 'rgba(226,232,240,0.6)' }}>
+                          {factor.importance}/10
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

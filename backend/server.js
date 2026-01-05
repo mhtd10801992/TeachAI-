@@ -24,6 +24,13 @@ import { initializeFirebaseStorage } from "./services/firebaseStorageService.js"
 import { initializeDocumentCache } from "./controllers/documentController.js";
 
 const app = express();
+
+// Add middleware to disable QUIC/HTTP3 and force HTTP/2
+app.use((req, res, next) => {
+  res.setHeader('alt-svc', 'clear');
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 

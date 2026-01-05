@@ -33,7 +33,7 @@ export default function DocumentHistory({ onReview }) {
       
       // Check if it's a network error
       if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
-        setError('Cannot connect to server. Make sure backend is running on http://localhost:5000');
+        setError('Cannot connect to backend server. If running locally, ensure backend is running on http://localhost:4000 and you are accessing the app at http://localhost:5173');
       }
     } finally {
       setLoading(false);

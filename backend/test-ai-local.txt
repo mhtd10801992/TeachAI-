@@ -1,0 +1,1 @@
+Test AI analysis with local backend

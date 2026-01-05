@@ -9,6 +9,8 @@ dotenv.config();
 import { createCanvas } from 'canvas';
 global.Canvas = createCanvas;
 
+// Updated: 2026-01-05 - OpenAI API key secret refreshed
+
 import express from "express";
 import cors from "cors";
 import uploadRoutes from "./routes/upload.js";

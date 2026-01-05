@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import API from '../api/api';
-import Mermaid from 'mermaid-react';
+import mermaid from 'mermaid';
+
+// Initialize mermaid
+mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
 export default function AIChat({ documents }) {
   const [messages, setMessages] = useState([]);
@@ -808,7 +811,7 @@ export default function AIChat({ documents }) {
         <div style={{ marginBottom: '18px' }}>
           <h4 style={{ color: '#6366f1', margin: '0 0 8px 0' }}>Mermaid Diagram (Live)</h4>
           <div style={{ background: '#fff', borderRadius: '10px', padding: '16px', marginBottom: '10px', overflowX: 'auto' }}>
-            <Mermaid chart={mermaidCode} />
+            <MermaidDiagram chart={mermaidCode} />
           </div>
           <h4 style={{ color: '#6366f1', margin: '12px 0 8px 0' }}>Mermaid Diagram Code</h4>
           <pre style={{ background: '#18181b', color: '#a5b4fc', padding: '16px', borderRadius: '10px', fontSize: '14px', overflowX: 'auto' }}>{mermaidCode}</pre>
@@ -842,4 +845,19 @@ export default function AIChat({ documents }) {
     </div>
     </div>
   );
+}
+
+// Mermaid component for rendering diagrams
+function MermaidDiagram({ chart }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (ref.current && chart) {
+      ref.current.removeAttribute('data-processed');
+      ref.current.innerHTML = chart;
+      mermaid.contentLoaded();
+    }
+  }, [chart]);
+
+  return <div ref={ref} className="mermaid"></div>;
 }

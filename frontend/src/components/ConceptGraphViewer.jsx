@@ -50,24 +50,52 @@ function makeConceptId(name) {
 // 1. Node Builder (Concept → Cytoscape Node)
 function buildNodes(concepts) {
   if (!Array.isArray(concepts)) return [];
-  return concepts.map((c) => ({
-    data: {
-      id: makeConceptId(c.id || c.name),  // Use id if available, else name
-      label: c.name || c.id || 'Unknown',
-      type: c.type || 'supporting',
-      definition: c.definition || '',
-      examples: c.examples || [],
-      pageRange: c.pageRange || [],
-      headingPath: c.headingPath || [],
-      // Additional metadata for display
-      evidence: c.evidence || '',
-      openQuestions: c.open_questions || c.openQuestions || [],
-      dependsOn: c.depends_on || c.dependsOn || [],
-      relatedTo: c.related_to || c.relatedTo || [],
-      contrastsWith: c.contrasts_with || c.contrastsWith || [],
-      mergedFrom: c.mergedFrom || []
-    },
-  }));
+  
+  const nodes = [];
+  
+  concepts.forEach((c) => {
+    // Add the main concept node
+    nodes.push({
+      data: {
+        id: makeConceptId(c.id || c.name),  // Use id if available, else name
+        label: c.name || c.id || 'Unknown',
+        type: c.type || 'supporting',
+        definition: c.definition || '',
+        examples: c.examples || [],
+        pageRange: c.pageRange || [],
+        headingPath: c.headingPath || [],
+        // Additional metadata for display
+        evidence: c.evidence || '',
+        openQuestions: c.open_questions || c.openQuestions || [],
+        dependsOn: c.depends_on || c.dependsOn || [],
+        relatedTo: c.related_to || c.relatedTo || [],
+        contrastsWith: c.contrasts_with || c.contrastsWith || [],
+        mergedFrom: c.mergedFrom || [],
+        factors: c.factors || []  // Store factors for reference
+      },
+    });
+    
+    // Add factor nodes if they exist
+    if (c.factors && Array.isArray(c.factors) && c.factors.length > 0) {
+      c.factors.forEach((factor, index) => {
+        const factorId = `${makeConceptId(c.id || c.name)}_factor_${index}`;
+        const factorLabel = typeof factor === 'string' ? factor : (factor.factor || factor.name || `Factor ${index + 1}`);
+        
+        nodes.push({
+          data: {
+            id: factorId,
+            label: factorLabel,
+            type: 'factor',  // New type for factors
+            parentConcept: makeConceptId(c.id || c.name),
+            definition: typeof factor === 'object' ? factor.value || factor.description || '' : '',
+            importance: typeof factor === 'object' ? factor.importance : 5
+          },
+        });
+      });
+    }
+  });
+  
+  return nodes;
 }
 
 // 2. Edge Builder (Relationship → Cytoscape Edge)
@@ -115,6 +143,25 @@ function buildEdges(relationships, nodes) {
       };
     })
     .filter(Boolean); // Remove null entries
+    
+  // Add edges from concepts to their factors
+  nodes.forEach(node => {
+    if (node.data.type === 'factor' && node.data.parentConcept) {
+      const parentId = node.data.parentConcept;
+      if (validNodeIds.has(parentId)) {
+        edges.push({
+          data: {
+            id: `${parentId}_has_factor_${node.data.id}`,
+            source: parentId,
+            target: node.data.id,
+            relationship: 'has_factor',
+            description: 'Contains factor',
+            strength: 'strong'
+          }
+        });
+      }
+    }
+  });
     
   if (missingNodes.size > 0) {
     console.log(`📝 Available nodes: [${Array.from(validNodeIds).join(', ')}]`);
@@ -255,6 +302,18 @@ export default function ConceptGraphViewer({ mindMap }) {
             'background-color': '#E74C3C'
           }
         },
+        {
+          selector: 'node[type="factor"]',
+          style: {
+            'background-color': '#F59E0B',
+            'shape': 'ellipse',
+            'width': '100px',
+            'height': '30px',
+            'font-size': '10px',
+            'border-color': '#D97706',
+            'border-width': 1
+          }
+        },
         
         // Base edge style
         {
@@ -333,6 +392,16 @@ export default function ConceptGraphViewer({ mindMap }) {
             'line-color': '#22C55E',
             'target-arrow-color': '#22C55E',
             'width': 3
+          }
+        },
+        {
+          selector: 'edge[relationship="has_factor"]',
+          style: {
+            'line-color': '#F59E0B',
+            'target-arrow-color': '#F59E0B',
+            'width': 1.5,
+            'line-style': 'dotted',
+            'opacity': 0.6
           }
         },
         

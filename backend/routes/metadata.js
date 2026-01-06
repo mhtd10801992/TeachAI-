@@ -284,6 +284,62 @@ router.get('/documents/:id/equations', async (req, res) => {
   }
 });
 
+// Process equations and numeric data on-demand
+router.post('/documents/:id/process-analysis', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { processEquations = true, processNumeric = true } = req.body;
+
+    // Get document from Firebase
+    const { getDocumentFromFirebase, saveDocumentToFirebase } = await import('../services/firebaseStorageService.js');
+    const document = await getDocumentFromFirebase(id);
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    let updated = false;
+    const results = { equations: null, numeric: null };
+
+    // Process equations if requested
+    if (processEquations && document.document?.metadata?.equations) {
+      const { composeAndExplainEquations } = await import('../services/documentMetadataService.js');
+      const rawEquations = document.document.metadata.equations;
+      const processedEquations = await composeAndExplainEquations(rawEquations, false);
+      
+      document.document.metadata.equations = processedEquations;
+      results.equations = processedEquations.length;
+      updated = true;
+    }
+
+    // Process numeric data if requested
+    if (processNumeric && document.document?.metadata?.numericData) {
+      const { generateNumericExplanations } = await import('../services/documentMetadataService.js');
+      const rawNumeric = document.document.metadata.numericData;
+      const processedNumeric = await generateNumericExplanations(rawNumeric);
+      
+      document.document.metadata.numericData = processedNumeric;
+      results.numeric = processedNumeric.length;
+      updated = true;
+    }
+
+    // Save updated document back to Firebase
+    if (updated) {
+      await saveDocumentToFirebase(document);
+    }
+
+    res.json({
+      success: true,
+      message: 'Analysis processed successfully',
+      processed: results,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error processing analysis:', error);
+    res.status(500).json({ error: 'Failed to process analysis', message: error.message });
+  }
+});
+
 // Generate AI explanation for a specific equation
 router.post('/documents/:id/equations/explain', async (req, res) => {
   try {

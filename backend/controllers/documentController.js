@@ -109,12 +109,21 @@ export const getAllDocuments = async (req, res) => {
     
     console.log(`📊 Fetching documents - Cache has ${documentHistory.length} documents`);
     
-    // Filter out any invalid documents
+    // Filter out any invalid documents and ensure safe access to nested properties
     const validDocuments = documentHistory.filter(doc => {
       try {
-        return doc && doc.createdAt && doc.document;
+        if (!doc || !doc.document) {
+          console.warn('Document missing required fields');
+          return false;
+        }
+        // Ensure document has basic structure
+        if (!doc.createdAt) {
+          console.warn(`Document ${doc.document.id || 'unknown'} missing createdAt`);
+          return false;
+        }
+        return true;
       } catch (e) {
-        console.error('Invalid document found:', e);
+        console.error('Invalid document found:', e.message);
         return false;
       }
     });
@@ -251,19 +260,25 @@ export const getDocumentStats = async (req, res) => {
   try {
     const totalDocuments = documentHistory.length;
     const pendingValidation = documentHistory.filter(doc => 
-      doc.status === 'pending_validation'
+      doc && doc.status === 'pending_validation'
     ).length;
     const processed = documentHistory.filter(doc => 
-      doc.status === 'processed'
+      doc && doc.status === 'processed'
     ).length;
     
-    // Get most common topics
-    const allTopics = documentHistory.flatMap(doc => 
-      doc.document.analysis?.topics?.items || []
-    );
+    // Get most common topics with defensive checks
+    const allTopics = documentHistory.flatMap(doc => {
+      try {
+        return doc?.document?.analysis?.topics?.items || [];
+      } catch (e) {
+        return [];
+      }
+    });
     const topicCounts = {};
     allTopics.forEach(topic => {
-      topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+      if (topic && typeof topic === 'string') {
+        topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+      }
     });
     const popularTopics = Object.entries(topicCounts)
       .sort(([,a], [,b]) => b - a)
@@ -280,15 +295,19 @@ export const getDocumentStats = async (req, res) => {
             popularTopics,
             averageConfidence: documentHistory.length > 0 
               ? documentHistory.reduce((sum, doc) => {
-                  const analysis = doc.document.analysis;
-                  if (!analysis) return sum;
-                  const avgConfidence = (
-                    (analysis.summary?.confidence || 0) +
-                    (analysis.topics?.confidence || 0) +
-                    (analysis.entities?.confidence || 0) +
-                    (analysis.sentiment?.confidence || 0)
-                  ) / 4;
-                  return sum + avgConfidence;
+                  try {
+                    const analysis = doc?.document?.analysis;
+                    if (!analysis) return sum;
+                    const avgConfidence = (
+                      (analysis.summary?.confidence || 0) +
+                      (analysis.topics?.confidence || 0) +
+                      (analysis.entities?.confidence || 0) +
+                      (analysis.sentiment?.confidence || 0)
+                    ) / 4;
+                    return sum + avgConfidence;
+                  } catch (e) {
+                    return sum;
+                  }
                 }, 0) / documentHistory.length 
               : 0,
             storage: storageStats,

@@ -10,6 +10,12 @@ if (process.env.OPENAI_API_KEY) {
 // ================ EQUATION COMPOSER LAYER ================
 // Step 1: Compose complete equations from metadata
 const composeEquation = (equationMeta) => {
+  // Defensive: Check if equationMeta is valid
+  if (!equationMeta || typeof equationMeta !== 'object') {
+    console.warn('Invalid equation metadata:', equationMeta);
+    return 'Unknown equation';
+  }
+  
   const { variables, equation } = equationMeta;
   
   // Already has a full equation string
@@ -18,7 +24,7 @@ const composeEquation = (equationMeta) => {
   }
   
   // Try to reconstruct from variables and operators
-  if (variables && variables.length >= 2) {
+  if (variables && Array.isArray(variables) && variables.length >= 2) {
     // Simple composition: var1 = var2 + var3...
     return `${variables[0]} = ${variables.slice(1).join(' + ')}`;
   }
@@ -28,6 +34,16 @@ const composeEquation = (equationMeta) => {
 
 // Step 2: Generate meaningful explanation for equation
 const explainEquation = (equation, sentence, variables) => {
+  // Defensive: Check inputs
+  if (!equation || typeof equation !== 'string') {
+    console.warn('Invalid equation for explanation:', equation);
+    return {
+      short: 'Equation data unavailable',
+      context: sentence || '',
+      mathematical: 'Unable to explain this equation due to missing data.'
+    };
+  }
+  
   // Extract relationship type from equation
   let relationship = 'is calculated from';
   
@@ -37,13 +53,13 @@ const explainEquation = (equation, sentence, variables) => {
   else if (equation.includes('÷') || equation.includes('/')) relationship = 'is the ratio of';
   else if (equation.includes('^')) relationship = 'is raised to the power of';
   
-  const leftSide = variables && variables.length > 0 ? variables[0] : equation.split('=')[0]?.trim() || 'variable';
-  const rightSide = variables && variables.length > 1 ? variables.slice(1).join(', ') : equation.split('=')[1]?.trim() || 'expression';
+  const leftSide = variables && Array.isArray(variables) && variables.length > 0 ? variables[0] : equation.split('=')[0]?.trim() || 'variable';
+  const rightSide = variables && Array.isArray(variables) && variables.length > 1 ? variables.slice(1).join(', ') : equation.split('=')[1]?.trim() || 'expression';
   
   return {
     short: `**${leftSide}** ${relationship} ${rightSide}`,
-    context: sentence,
-    mathematical: `The equation **${equation}** defines the relationship between ${variables ? variables.join(', ') : 'variables'}.`
+    context: sentence || '',
+    mathematical: `The equation **${equation}** defines the relationship between ${variables && Array.isArray(variables) ? variables.join(', ') : 'variables'}.`
   };
 };
 
@@ -75,35 +91,51 @@ Provide a clear, concise explanation (max 30 words) of what this equation repres
 
 // Step 4: Compose and enhance all equations
 const composeAndExplainEquations = async (equations, generateAIExplanations = false) => {
-  if (!equations || equations.length === 0) return [];
+  if (!equations || !Array.isArray(equations) || equations.length === 0) {
+    return [];
+  }
   
   const composedEquations = [];
   
   for (const eq of equations) {
-    const composedEq = composeEquation(eq);
-    const basicExplanation = explainEquation(composedEq, eq.sentence, eq.variables);
-    
-    const enhanced = {
-      ...eq,
-      composedEquation: composedEq,
-      explanation: basicExplanation,
-      displayEquation: formatEquationForDisplay(composedEq)
-    };
-    
-    // Optionally generate AI explanation
-    if (generateAIExplanations && openai) {
-      try {
-        enhanced.aiExplanation = await explainEquationWithAI(composedEq, eq.sentence);
-      } catch (err) {
-        console.error('Error in AI explanation:', err.message);
-      }
+    // Skip invalid equation entries
+    if (!eq || typeof eq !== 'object') {
+      console.warn('Skipping invalid equation entry:', eq);
+      continue;
     }
     
-    composedEquations.push(enhanced);
+    try {
+      const composedEq = composeEquation(eq);
+      const basicExplanation = explainEquation(composedEq, eq.sentence, eq.variables);
+      
+      const enhanced = {
+        ...eq,
+        composedEquation: composedEq,
+        explanation: basicExplanation,
+        displayEquation: formatEquationForDisplay(composedEq)
+      };
+      
+      // Optionally generate AI explanation
+      if (generateAIExplanations && openai) {
+        try {
+          enhanced.aiExplanation = await explainEquationWithAI(composedEq, eq.sentence);
+        } catch (err) {
+          console.error('Error in AI explanation:', err.message);
+        }
+      }
+      
+      composedEquations.push(enhanced);
+    } catch (err) {
+      console.error('Error processing equation:', err.message, eq);
+      // Continue with next equation instead of crashing
+    }
   }
   
   return composedEquations;
 };
+
+// Export for on-demand processing
+export { composeAndExplainEquations, generateNumericExplanations };
 
 // Step 5: Format equation for MathJax display
 const formatEquationForDisplay = (equation) => {
@@ -216,19 +248,18 @@ const generateEquationExplanations = async (equations) => {
   }
 };
 
-export const extractDocumentMetadata = async (text, analysis) => {
+export const extractDocumentMetadata = async (text, analysis, skipEquationComposer = false) => {
   const cleanText = text || '';
   const sentences = extractSentences(cleanText);
   const paragraphs = extractParagraphs(cleanText);
   
-  // Extract numeric and scientific data
+  // Extract numeric and scientific data (RAW ONLY - no processing)
   let numericData = extractNumericData(cleanText, sentences, paragraphs);
   let equations = extractScientificEquations(cleanText, sentences);
   
-  // Step 5: Apply Equation Composer Layer (without automatic AI explanations)
-  console.log('🧮 Applying Equation Composer Layer...');
-  equations = await composeAndExplainEquations(equations, false); // without AI explanations (on-demand only)
-  console.log(`✅ Composed ${equations.length} equations with explanations`);
+  // NOTE: Equation composition and AI explanations are now ON-DEMAND only
+  // Users can trigger processing via UI buttons in EquationExplorer/NumericDataExplorer
+  console.log(`📊 Extracted ${equations.length} raw equations and ${numericData.length} numeric items (no auto-processing)`);
   
   // Step 5: Generate AI explanations for numeric data only (optional, only if OpenAI is available)
   if (openai && numericData.length > 0) {

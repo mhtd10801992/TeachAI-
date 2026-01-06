@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import API from '../api/api';
 import ConceptGraphViewer from './ConceptGraphViewer';
 import EquationExplorer from './EquationExplorer';
+import AIChartGenerator from './AIChartGenerator';
 
 // Research Paper Style Components
 const ResearchTable = ({ title, headers, rows, caption }) => (
@@ -1816,17 +1817,31 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
         ) : activeSection === 'image-gallery' ? (
           <ImageGallerySection document={docData} analysis={analysis} documentId={documentId} />
         ) : activeSection === 'equations-numbers' ? (
-          <div className="glass-card" style={{ padding: '30px' }}>
-            <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span>🧮</span>
-              Extracted Equations & Numeric Data
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '30px', lineHeight: '1.6' }}>
-              This section displays all mathematical equations, scientific formulas, and numeric data 
-              (percentages, measurements, currency, ratios, etc.) extracted from the document.
-            </p>
-            <EquationExplorer documentId={documentId} />
-          </div>
+          <>
+            <div className="glass-card" style={{ padding: '30px' }}>
+              <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span>🧮</span>
+                Extracted Equations & Numeric Data
+              </h2>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '30px', lineHeight: '1.6' }}>
+                This section displays all mathematical equations, scientific formulas, and numeric data 
+                (percentages, measurements, currency, ratios, etc.) extracted from the document.
+              </p>
+              <EquationExplorer documentId={documentId} />
+            </div>
+
+            <div className="glass-card" style={{ padding: '30px', marginTop: '24px' }}>
+              <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span>📊</span>
+                AI-Generated Charts & Visualizations
+              </h2>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '30px', lineHeight: '1.6' }}>
+                Automatically generated charts and graphs that visualize relationships, trends, and patterns
+                found in the document's equations, numeric data, and topics using AI analysis.
+              </p>
+              <AIChartGenerator documentId={documentId} metadata={docData?.metadata} />
+            </div>
+          </>
         ) : (
           <>
             <div className="glass-card" style={{ padding: '30px', marginBottom: '24px' }}>

@@ -384,14 +384,38 @@ export const loadDocumentsFromFirebase = async (useCache = true) => {
       
       const documents = (await Promise.all(documentPromises)).filter(doc => doc !== null);
       
-      documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      console.log(`✅ Loaded ${documents.length} documents from Firebase`);
+      // Compatibility layer: Add missing fields to old documents
+      const compatibleDocuments = documents.map(doc => {
+        try {
+          // If document has equations without composer fields, add placeholders
+          if (doc?.document?.metadata?.equations && Array.isArray(doc.document.metadata.equations)) {
+            doc.document.metadata.equations = doc.document.metadata.equations.map(eq => {
+              if (eq && !eq.composedEquation) {
+                return {
+                  ...eq,
+                  composedEquation: eq.equation || 'Unknown',
+                  displayEquation: eq.equation || 'Unknown',
+                  explanation: eq.explanation || { short: 'Equation from older upload', context: '', mathematical: '' }
+                };
+              }
+              return eq;
+            });
+          }
+          return doc;
+        } catch (e) {
+          console.warn('Error applying compatibility layer to document:', e.message);
+          return doc;
+        }
+      });
+      
+      compatibleDocuments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      console.log(`✅ Loaded ${compatibleDocuments.length} documents from Firebase`);
       
       // Update cache
-      documentsCache = documents;
+      documentsCache = compatibleDocuments;
       cacheTimestamp = Date.now();
       
-      return documents;
+      return compatibleDocuments;
     } else {
       // Local Storage Fallback
       await initializeLocalStorage();

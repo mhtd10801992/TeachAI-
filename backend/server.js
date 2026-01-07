@@ -32,13 +32,24 @@ import { initializeDocumentCache } from "./controllers/documentController.js";
 
 const app = express();
 
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: ['https://try1-7d848.web.app', 'https://try1-7d848.firebaseapp.com', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+
 // Add middleware to disable QUIC/HTTP3 and force HTTP/2
 app.use((req, res, next) => {
   res.setHeader('alt-svc', 'clear');
+  res.removeHeader('alt-svc');
   next();
 });
 
-app.use(cors());
 app.use(express.json());
 
 const initializeApp = async () => {

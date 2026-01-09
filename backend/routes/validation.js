@@ -7,7 +7,11 @@ import {
   saveQuestionForLater,
   getUserQuestionQueue,
   answerQueuedQuestions,
-  getPendingDocuments
+  getPendingDocuments,
+  getGlobalDictionary,
+  extractDocumentAbbreviations,
+  updateDictionaryTerms,
+  searchDictionary
 } from "../controllers/validationController.js";
 
 const router = express.Router();
@@ -22,5 +26,11 @@ router.post("/document/:documentId/approve", approveDocumentForVectorization); /
 router.get("/questions", getUserQuestionQueue);                  // GET /api/validation/questions
 router.post("/document/:documentId/questions", saveQuestionForLater); // POST /api/validation/document/123/questions
 router.put("/questions/:queueId/answer", answerQueuedQuestions); // PUT /api/validation/questions/q_456/answer
+
+// Dictionary management
+router.get("/dictionary", getGlobalDictionary);                  // GET /api/validation/dictionary
+router.get("/dictionary/search", searchDictionary);              // GET /api/validation/dictionary/search?query=term
+router.post("/document/:documentId/abbreviations", extractDocumentAbbreviations); // POST /api/validation/document/123/abbreviations
+router.put("/document/:documentId/dictionary", updateDictionaryTerms); // PUT /api/validation/document/123/dictionary
 
 export default router;

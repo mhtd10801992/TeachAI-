@@ -932,3 +932,47 @@ Format each question clearly with its answer.`;
     throw error;
   }
 };
+
+// Extract abbreviations, acronyms, and unclear terminology from text
+export const extractAbbreviations = async (text, existingDictionary = {}) => {
+  const knownTermsList = Object.keys(existingDictionary).join(', ');
+  
+  const prompt = `You are a terminology expert. Analyze the following document and extract:
+1. **Abbreviations and Acronyms**: All abbreviations (e.g., "AI", "NASA", "DoE", "SOP") 
+2. **Technical Terms**: Domain-specific technical terms that may be unclear to general readers
+3. **Jargon**: Industry-specific jargon or specialized terminology
+4. **Proper Nouns**: Specific tools, methods, or proprietary names that need definition
+
+${knownTermsList ? `\n**Known Terms (already in dictionary - skip these):**\n${knownTermsList}\n` : ''}
+
+**Document Text:**
+${text.substring(0, 25000)}
+
+**Requirements:**
+1. For each term found, try to infer its definition from context in the document
+2. Mark confidence level (high/medium/low) based on how clear the definition is
+3. If no definition is found in text, leave it blank for user to fill
+4. Focus on terms that appear important or repeated
+5. Return ONLY a valid JSON array with this exact structure:
+[
+  {
+    "term": "abbreviation or term",
+    "definition": "inferred definition or empty string",
+    "confidence": "high|medium|low",
+    "context": "sentence or phrase where it appears",
+    "category": "abbreviation|acronym|technical|jargon|proper_noun"
+  }
+]
+
+Return ONLY the JSON array, no other text or markdown formatting.`;
+
+  try {
+    const content = await runChat(prompt, { maxTokens: 1500 });
+    const jsonContent = content.replace(/```json\n?|```\n?/g, '').trim();
+    const parsed = JSON.parse(jsonContent);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('Abbreviation extraction error:', error.message);
+    return [];
+  }
+};

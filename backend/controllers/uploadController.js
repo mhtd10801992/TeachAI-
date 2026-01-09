@@ -3,6 +3,7 @@ import { saveUploadedFileToFirebase } from '../services/firebaseStorageService.j
 import { processWithAI } from '../services/aiService.js';
 import { extractImagesFromPDF, renderPDFPagesAsImages, extractImagesFromWord } from '../services/pdfImageExtractor.js';
 import { extractDocumentMetadata } from '../services/documentMetadataService.js';
+import { extractFromExcel, formatExcelAsMarkdown } from '../services/excelExtractor.js';
 // import { extractTablesFromPDF, formatTablesAsText } from '../services/pdfTableExtractor.js';  // DISABLED: pdf-table-extractor has incompatible bundled pdfjs-dist
 import { describeImageWithAI } from '../services/imageAIService.js';
 import fs from 'fs';
@@ -589,6 +590,30 @@ const extractTextFromBuffer = async (file) => {
       } catch (wordError) {
         console.error('Word document text extraction failed:', wordError.message);
         return `[Word Document: ${file.originalname} - Text extraction failed but document was processed.]`;
+      }
+    }
+
+    // For Excel files (.xlsx, .xls, .csv), extract data and convert to text
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.mimetype === 'application/vnd.ms-excel' ||
+        file.mimetype === 'text/csv' ||
+        file.originalname.endsWith('.xlsx') ||
+        file.originalname.endsWith('.xls') ||
+        file.originalname.endsWith('.csv')) {
+      console.log(`📊 Extracting data from Excel file: ${file.originalname}`);
+      try {
+        const { extractFromExcel } = await import('../services/excelExtractor.js');
+        const excelData = extractFromExcel(file.buffer, file.originalname);
+        
+        // Store the structured data globally for later use in validation
+        global.excelData = global.excelData || {};
+        global.excelData[fileId] = excelData;
+        
+        console.log(`📄 Extracted ${excelData.allText.length} characters from Excel (${excelData.sheetCount} sheets, ${excelData.statistics.totalRows} rows)`);
+        return excelData.allText;
+      } catch (excelError) {
+        console.error('Excel extraction failed:', excelError.message);
+        return `[Excel Document: ${file.originalname} - Data extraction failed but document was processed.]`;
       }
     }
 

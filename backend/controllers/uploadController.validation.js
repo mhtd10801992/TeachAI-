@@ -1,8 +1,52 @@
 // Enhanced Upload Controller with Human-in-the-Loop Validation
 import { uploadToFirebase } from '../services/firebaseService.js';
 import { extractTextFromFile } from '../services/textExtractor.js';
-import { processWithAI } from '../services/aiService.js';
+import { processWithAI, extractAbbreviations } from '../services/aiService.js';
 import { storeInVectorDB } from '../services/vectorService.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { getStorage } from 'firebase-admin/storage';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DICTIONARY_PATH = path.join(__dirname, '../data/global-dictionary.json');
+const FIREBASE_DICTIONARY_PATH = 'TeachAI/global-dictionary.json';
+
+// Check if Firebase is available
+let useFirebase = false;
+let bucket = null;
+try {
+  bucket = getStorage().bucket();
+  useFirebase = true;
+} catch (error) {
+  console.log('⚠️ Firebase not available for dictionary in upload controller');
+}
+
+// Load global dictionary (from Firebase or local fallback)
+const loadDictionary = async () => {
+  try {
+    // Try Firebase first
+    if (useFirebase && bucket) {
+      const file = bucket.file(FIREBASE_DICTIONARY_PATH);
+      const [exists] = await file.exists();
+      
+      if (exists) {
+        const [content] = await file.download();
+        return JSON.parse(content.toString());
+      }
+    }
+    
+    // Fallback to local storage
+    if (fs.existsSync(DICTIONARY_PATH)) {
+      const data = fs.readFileSync(DICTIONARY_PATH, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Failed to load dictionary:', error);
+  }
+  return { version: "1.0", lastUpdated: new Date().toISOString(), terms: {}, statistics: { totalTerms: 0, lastAddedTerm: null, documentsProcessed: 0 } };
+};
 
 export const handleUpload = async (req, res) => {
   try {
@@ -31,6 +75,17 @@ export const handleUpload = async (req, res) => {
     // Phase 4: Determine if human validation is needed
     const needsValidation = requiresHumanValidation(aiAnalysis);
     
+    // Phase 5: Extract abbreviations and terminology (run in background)
+    let abbreviations = [];
+    try {
+      const dictionary = await loadDictionary();
+      abbreviations = await extractAbbreviations(extractedText, dictionary.terms);
+      console.log(`📚 Extracted ${abbreviations.length} abbreviations/terms from ${file.originalname}`);
+    } catch (error) {
+      console.error('Failed to extract abbreviations:', error);
+      // Continue even if abbreviation extraction fails
+    }
+    
     if (needsValidation) {
       // Store document in pending validation state
       await savePendingDocument({
@@ -38,6 +93,7 @@ export const handleUpload = async (req, res) => {
         filename: file.originalname,
         text: extractedText,
         aiAnalysis,
+        abbreviations, // Include extracted abbreviations
         status: 'pending_validation',
         createdAt: new Date().toISOString()
       });
@@ -77,12 +133,17 @@ export const handleUpload = async (req, res) => {
           // AI-generated questions for clarification
           questions: aiAnalysis.questions || [],
           
+          // Extracted abbreviations and terminology
+          abbreviations: abbreviations,
+          abbreviationsCount: abbreviations.length,
+          
           // Text excerpts for context
           textExcerpts: generateTextExcerpts(extractedText, aiAnalysis),
           
           // Next steps for user
           nextSteps: [
             "Review AI analysis accuracy",
+            "Define abbreviations and terminology",
             "Edit any incorrect information",
             "Answer AI questions if needed",
             "Approve for vectorization"

@@ -6,9 +6,13 @@ export default function DocumentValidator({ documentId }) {
   const [editing, setEditing] = useState({});
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState([]);
+  const [abbreviations, setAbbreviations] = useState([]);
+  const [loadingAbbreviations, setLoadingAbbreviations] = useState(false);
+  const [dictionary, setDictionary] = useState({});
 
   useEffect(() => {
     loadDocument();
+    loadDictionary();
   }, [documentId]);
 
   const loadDocument = async () => {
@@ -16,10 +20,68 @@ export default function DocumentValidator({ documentId }) {
       const response = await API.get(`/validation/document/${documentId}`);
       setDocument(response.data.document);
       setQuestions(response.data.document.questions || []);
+      
+      // Load abbreviations if already extracted
+      if (response.data.document.abbreviations) {
+        setAbbreviations(response.data.document.abbreviations);
+      }
     } catch (error) {
       console.error('Failed to load document:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDictionary = async () => {
+    try {
+      const response = await API.get('/validation/dictionary');
+      setDictionary(response.data.dictionary.terms || {});
+    } catch (error) {
+      console.error('Failed to load dictionary:', error);
+    }
+  };
+
+  const extractAbbreviations = async () => {
+    setLoadingAbbreviations(true);
+    try {
+      const response = await API.post(`/validation/document/${documentId}/abbreviations`);
+      setAbbreviations(response.data.abbreviations || []);
+    } catch (error) {
+      console.error('Failed to extract abbreviations:', error);
+      alert('Failed to extract abbreviations');
+    } finally {
+      setLoadingAbbreviations(false);
+    }
+  };
+
+  const updateAbbreviationDefinition = (index, field, value) => {
+    const updated = [...abbreviations];
+    updated[index] = { ...updated[index], [field]: value };
+    setAbbreviations(updated);
+  };
+
+  const saveDictionaryTerms = async () => {
+    try {
+      const termsToSave = abbreviations
+        .filter(abbr => abbr.definition && abbr.definition.trim() !== '')
+        .map(abbr => ({
+          term: abbr.term,
+          definition: abbr.definition,
+          category: abbr.category,
+          source: documentId
+        }));
+
+      if (termsToSave.length === 0) {
+        alert('No terms with definitions to save');
+        return;
+      }
+
+      await API.put(`/validation/document/${documentId}/dictionary`, { terms: termsToSave });
+      alert(`Successfully saved ${termsToSave.length} terms to global dictionary!`);
+      loadDictionary(); // Reload to get updated dictionary
+    } catch (error) {
+      console.error('Failed to save dictionary terms:', error);
+      alert('Failed to save dictionary terms');
     }
   };
 
@@ -132,6 +194,162 @@ export default function DocumentValidator({ documentId }) {
         isSelect={true}
         options={['positive', 'negative', 'neutral']}
       />
+
+      {/* Abbreviations & Terminology Dictionary */}
+      <div style={{ 
+        backgroundColor: '#e3f2fd', 
+        padding: '15px', 
+        borderRadius: '8px',
+        marginTop: '20px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h3>📚 Abbreviations & Terminology Dictionary</h3>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={extractAbbreviations}
+              disabled={loadingAbbreviations}
+              style={{ 
+                padding: '8px 16px', 
+                backgroundColor: '#2196f3', 
+                color: 'white',
+                border: 'none', 
+                borderRadius: '4px',
+                cursor: loadingAbbreviations ? 'wait' : 'pointer'
+              }}
+            >
+              {loadingAbbreviations ? '⏳ Extracting...' : '🔍 Extract Terms'}
+            </button>
+            {abbreviations.length > 0 && (
+              <button 
+                onClick={saveDictionaryTerms}
+                style={{ 
+                  padding: '8px 16px', 
+                  backgroundColor: '#4caf50', 
+                  color: 'white',
+                  border: 'none', 
+                  borderRadius: '4px'
+                }}
+              >
+                💾 Save to Global Dictionary
+              </button>
+            )}
+          </div>
+        </div>
+
+        {abbreviations.length > 0 ? (
+          <div>
+            <p style={{ marginBottom: '10px', color: '#666' }}>
+              AI detected {abbreviations.length} terms that may need definition. 
+              Please review and add definitions where needed.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ 
+                width: '100%', 
+                borderCollapse: 'collapse',
+                backgroundColor: 'white'
+              }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#1976d2', color: 'white' }}>
+                    <th style={{ padding: '10px', textAlign: 'left', width: '15%' }}>Term</th>
+                    <th style={{ padding: '10px', textAlign: 'left', width: '10%' }}>Category</th>
+                    <th style={{ padding: '10px', textAlign: 'left', width: '35%' }}>Definition (Edit if needed)</th>
+                    <th style={{ padding: '10px', textAlign: 'left', width: '30%' }}>Context from Document</th>
+                    <th style={{ padding: '10px', textAlign: 'center', width: '10%' }}>AI Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {abbreviations.map((abbr, index) => {
+                    const isInDictionary = dictionary[abbr.term.toLowerCase()];
+                    return (
+                      <tr key={index} style={{ 
+                        borderBottom: '1px solid #ddd',
+                        backgroundColor: isInDictionary ? '#f1f8e9' : 'white'
+                      }}>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>
+                          {abbr.term}
+                          {isInDictionary && (
+                            <span style={{ 
+                              marginLeft: '5px', 
+                              fontSize: '10px', 
+                              color: '#4caf50',
+                              backgroundColor: '#c8e6c9',
+                              padding: '2px 6px',
+                              borderRadius: '3px'
+                            }}>
+                              ✓ In Dict
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          <select
+                            value={abbr.category}
+                            onChange={(e) => updateAbbreviationDefinition(index, 'category', e.target.value)}
+                            style={{ width: '100%', padding: '4px' }}
+                          >
+                            <option value="abbreviation">Abbreviation</option>
+                            <option value="acronym">Acronym</option>
+                            <option value="technical">Technical</option>
+                            <option value="jargon">Jargon</option>
+                            <option value="proper_noun">Proper Noun</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          <textarea
+                            value={abbr.definition || (isInDictionary ? dictionary[abbr.term.toLowerCase()].definition : '')}
+                            onChange={(e) => updateAbbreviationDefinition(index, 'definition', e.target.value)}
+                            placeholder="Enter definition..."
+                            style={{ 
+                              width: '100%', 
+                              minHeight: '50px',
+                              padding: '6px',
+                              border: abbr.definition ? '1px solid #4caf50' : '1px solid #ff9800',
+                              borderRadius: '4px'
+                            }}
+                          />
+                          {isInDictionary && (
+                            <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                              💡 Existing: {dictionary[abbr.term.toLowerCase()].definition}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '13px', color: '#555' }}>
+                          {abbr.context ? abbr.context.substring(0, 100) + (abbr.context.length > 100 ? '...' : '') : 'N/A'}
+                        </td>
+                        <td style={{ 
+                          padding: '10px', 
+                          textAlign: 'center',
+                          color: abbr.confidence === 'high' ? '#4caf50' : abbr.confidence === 'medium' ? '#ff9800' : '#f44336'
+                        }}>
+                          <div style={{ fontWeight: 'bold' }}>
+                            {abbr.confidence === 'high' ? '🟢' : abbr.confidence === 'medium' ? '🟡' : '🔴'}
+                          </div>
+                          <div style={{ fontSize: '11px' }}>
+                            {abbr.confidence || 'low'}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ 
+              marginTop: '10px', 
+              padding: '10px', 
+              backgroundColor: '#fff3e0', 
+              borderRadius: '4px',
+              fontSize: '13px'
+            }}>
+              <strong>💡 Tip:</strong> Terms highlighted in green are already in the global dictionary. 
+              You can update them or leave them as is. Terms with orange borders need definitions.
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: '#666', fontStyle: 'italic' }}>
+            Click "Extract Terms" to automatically detect abbreviations and technical terms that need definition.
+          </p>
+        )}
+      </div>
 
       {/* AI Questions */}
       {questions.length > 0 && (

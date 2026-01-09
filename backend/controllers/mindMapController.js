@@ -1,6 +1,6 @@
 // Mind Map Controller - Handles multi-document categorization and mind map generation
 import OpenAI from 'openai';
-import { loadDocumentsFromFirebase, saveMindMapToFirebase, getMindMapFromFirebase, listMindMapsFromFirebase } from '../services/firebaseStorageService.js';
+import { loadDocumentsFromFirebase, loadDocumentMetadataFromFirebase, saveMindMapToFirebase, getMindMapFromFirebase, listMindMapsFromFirebase } from '../services/firebaseStorageService.js';
 
 // Lazy initialization of OpenAI - will be initialized on first use
 let openai = null;
@@ -415,31 +415,20 @@ export const getAvailableDocuments = async (req, res) => {
   try {
     console.log('📚 Loading documents from Firebase for Mind Map selection...');
     
-    // Load all documents from Firebase (using cache)
-    const allDocuments = await loadDocumentsFromFirebase(true);
+    // Use lightweight metadata loader instead of full documents
+    const allDocuments = await loadDocumentMetadataFromFirebase(true);
     
     console.log(`✅ Loaded ${allDocuments.length} documents from Firebase`);
 
     const documentList = allDocuments.map(doc => {
-      // Handle different document structures
-      const docId = doc.id || doc.document?.id;
-      const docTitle = doc.title || doc.document?.filename || doc.document?.title || 'Untitled';
-      const docSummary = doc.summary || doc.document?.analysis?.summary?.text || doc.analysis?.summary?.text || 'No summary available';
-      const docCreatedAt = doc.createdAt || doc.document?.uploadDate;
-      const docConcepts = doc.concepts || doc.analysis?.concepts?.items || [];
-      
-      return {
-        id: docId,
-        title: docTitle,
-        createdAt: docCreatedAt,
-        summary: typeof docSummary === 'string' ? docSummary.substring(0, 150) + (docSummary.length > 150 ? '...' : '') : 'No summary',
-        hasAnalysis: !!(docConcepts && docConcepts.length > 0),
-        category: doc.category || 'General',
-        tags: doc.tags || []
-      };
+      // Document is already in the correct format from metadata loader
+      return doc;
     });
 
     console.log(`📤 Sending ${documentList.length} documents to frontend`);
+
+    // Set cache headers - cache for 30 seconds
+    res.set('Cache-Control', 'public, max-age=30');
 
     res.json({
       success: true,
@@ -468,6 +457,9 @@ export const getSavedMindMaps = async (req, res) => {
     if (mindMaps.length > 0) {
       console.log('   Mind maps:', mindMaps.map(m => `${m.id} (${m.createdAt})`).join(', '));
     }
+
+    // Set cache headers - cache for 30 seconds
+    res.set('Cache-Control', 'public, max-age=30');
 
     res.json({
       success: true,

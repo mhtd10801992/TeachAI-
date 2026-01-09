@@ -355,6 +355,128 @@ export const saveUploadedFileToFirebase = async (file, documentId) => {
 };
 
 // Load all documents from Firebase Storage or local fallback
+// Load only metadata for documents (lightweight version for list operations)
+export const loadDocumentMetadataFromFirebase = async (useCache = true) => {
+  try {
+    // Check cache first
+    if (useCache && documentsCache && cacheTimestamp && (Date.now() - cacheTimestamp < CACHE_DURATION)) {
+      console.log(`📦 Returning ${documentsCache.length} documents from cache`);
+      return documentsCache;
+    }
+    
+    if (useFirebase && bucket) {
+      // Try to load a pre-built index first
+      try {
+        const indexFile = bucket.file(FIREBASE_PATHS.INDEX);
+        const [exists] = await indexFile.exists();
+        
+        if (exists) {
+          console.log('📋 Loading document index from Firebase...');
+          const [content] = await indexFile.download();
+          const index = JSON.parse(content.toString());
+          
+          // Cache the index
+          documentsCache = index;
+          cacheTimestamp = Date.now();
+          
+          console.log(`✅ Loaded ${index.length} documents from index`);
+          return index;
+        }
+      } catch (indexError) {
+        console.log('⚠️ Document index not found, building from files...');
+      }
+      
+      // Fallback: Build lightweight metadata from file listings
+      const [files] = await bucket.getFiles({
+        prefix: FIREBASE_PATHS.DOCUMENTS
+      });
+      
+      const documentFiles = files.filter(file => file.name.endsWith('.json'));
+      console.log(`📚 Building metadata from ${documentFiles.length} document files...`);
+      
+      // Load only first 100 documents with timeout protection
+      const MAX_DOCS = 100;
+      const filesToLoad = documentFiles.slice(0, MAX_DOCS);
+      
+      const documentPromises = filesToLoad.map(async (file) => {
+        try {
+          const [content] = await file.download();
+          const doc = JSON.parse(content.toString());
+          
+          // Extract only necessary metadata
+          const docId = doc.id || doc.document?.id;
+          const docTitle = doc.title || doc.document?.filename || 'Untitled';
+          const docSummary = doc.summary || doc.document?.analysis?.summary?.text || 'No summary';
+          const docCreatedAt = doc.createdAt || doc.document?.uploadDate || new Date().toISOString();
+          const docConcepts = doc.concepts || doc.analysis?.concepts?.items || [];
+          
+          return {
+            id: docId,
+            title: docTitle,
+            createdAt: docCreatedAt,
+            summary: typeof docSummary === 'string' ? docSummary.substring(0, 150) : 'No summary',
+            hasAnalysis: !!(docConcepts && docConcepts.length > 0),
+            category: doc.category || 'General',
+            tags: doc.tags || []
+          };
+        } catch (error) {
+          console.error(`Error loading document metadata ${file.name}:`, error.message);
+          return null;
+        }
+      });
+      
+      const documents = (await Promise.all(documentPromises)).filter(doc => doc !== null);
+      
+      documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      console.log(`✅ Loaded metadata for ${documents.length} documents from Firebase`);
+      
+      // Update cache
+      documentsCache = documents;
+      cacheTimestamp = Date.now();
+      
+      return documents;
+    } else {
+      // Local Storage Fallback
+      await initializeLocalStorage();
+      
+      try {
+        const files = await fs.readdir(LOCAL_STORAGE.DOCUMENTS);
+        
+        // Load documents in parallel
+        const documentPromises = files
+          .filter(file => file.endsWith('.json'))
+          .map(async (file) => {
+            try {
+              const filePath = path.join(LOCAL_STORAGE.DOCUMENTS, file);
+              const content = await fs.readFile(filePath, 'utf8');
+              return JSON.parse(content);
+            } catch (error) {
+              console.error(`Error loading document ${file}:`, error);
+              return null;
+            }
+          });
+        
+        const documents = (await Promise.all(documentPromises)).filter(doc => doc !== null);
+        
+        documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        console.log(`✅ Loaded ${documents.length} documents from local storage`);
+        
+        // Update cache
+        documentsCache = documents;
+        cacheTimestamp = Date.now();
+        
+        return documents;
+      } catch (error) {
+        console.log('No local documents found, starting fresh');
+        return [];
+      }
+    }
+  } catch (error) {
+    console.error('Error loading documents:', error);
+    return [];
+  }
+};
+
 export const loadDocumentsFromFirebase = async (useCache = true) => {
   try {
     // Check cache first

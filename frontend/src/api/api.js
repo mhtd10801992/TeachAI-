@@ -13,7 +13,7 @@ const getBaseURL = () => {
 
 const API = axios.create({
   baseURL: getBaseURL(),
-  timeout: 60000, // 60 second timeout for mind maps and large operations
+  timeout: 90000, // 90 second timeout for mind maps and large operations
 });
 
 // Retry configuration for QUIC protocol errors

@@ -50,6 +50,23 @@ app.use((req, res, next) => {
   next();
 });
 
+// Extend timeout for long-running operations (mind maps, AI processing)
+// Set socket timeout to 2 minutes for Firebase-hosted environment
+const TIMEOUT_MS = 120000; // 2 minutes
+
+app.use((req, res, next) => {
+  // Set timeout for all requests
+  req.setTimeout(TIMEOUT_MS);
+  res.setTimeout(TIMEOUT_MS);
+  
+  // Set socket timeout
+  if (req.socket) {
+    req.socket.setTimeout(TIMEOUT_MS);
+  }
+  
+  next();
+});
+
 app.use(express.json());
 
 const initializeApp = async () => {

@@ -581,7 +581,7 @@ export const aiController = {
   // Analyze selected images with AI and explain their relationship to document
   async analyzeSelectedImages(req, res) {
     try {
-      const { documentId, imageIndices } = req.body;
+      const { documentId, imageIndices, forceRefresh } = req.body;
 
       if (!documentId) {
         return res.status(400).json({ 
@@ -606,6 +606,31 @@ export const aiController = {
       const doc = stored.document;
       const analysis = doc.analysis || {};
       const allImages = analysis.imageAnalysis || [];
+      
+      // Check if we already have cached analysis results
+      const cachedResults = doc.metadata?.imageAnalysisCache || {};
+      if (!forceRefresh && Object.keys(cachedResults).length > 0) {
+        // Filter cached results for requested indices
+        const requestedCached = {};
+        let allCached = true;
+        for (const index of imageIndices) {
+          if (cachedResults[index]) {
+            requestedCached[index] = cachedResults[index];
+          } else {
+            allCached = false;
+          }
+        }
+        
+        if (allCached) {
+          console.log(`✅ Returning cached image analysis for ${imageIndices.length} images`);
+          return res.json({
+            success: true,
+            results: requestedCached,
+            analyzedCount: Object.keys(requestedCached).length,
+            fromCache: true
+          });
+        }
+      }
 
       // Get text summary for context
       const text = doc.fullText || doc.text || doc.rawText || analysis.originalText || '';
@@ -649,10 +674,26 @@ export const aiController = {
         }
       }
 
+      // Save results to document metadata cache
+      try {
+        if (!doc.metadata) doc.metadata = {};
+        if (!doc.metadata.imageAnalysisCache) doc.metadata.imageAnalysisCache = {};
+        
+        Object.assign(doc.metadata.imageAnalysisCache, results);
+        doc.metadata.imageAnalysisCacheUpdated = new Date().toISOString();
+        
+        // Save back to Firebase
+        await require('../services/firebaseStorageService.js').saveDocumentToFirebase(documentId, stored);
+        console.log(`💾 Cached image analysis results for ${Object.keys(results).length} images`);
+      } catch (cacheError) {
+        console.warn('⚠️ Failed to cache image analysis:', cacheError.message);
+      }
+
       res.json({
         success: true,
         results,
-        analyzedCount: Object.keys(results).length
+        analyzedCount: Object.keys(results).length,
+        fromCache: false
       });
     } catch (error) {
       console.error('Image analysis error:', error);

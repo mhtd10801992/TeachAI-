@@ -31,7 +31,7 @@ async function loadAbbreviationDictionary() {
 
 export async function generatePresentationSlides(req, res) {
   try {
-    const { documentId } = req.body;
+    const { documentId, forceRefresh } = req.body;
 
     if (!documentId) {
       return res.status(400).json({
@@ -80,6 +80,20 @@ export async function generatePresentationSlides(req, res) {
       hasAnalysis: !!normalizedDoc.analysis,
       hasMetadata: !!normalizedDoc.metadata
     });
+
+    // Check if we have cached presentation slides
+    if (!forceRefresh && normalizedDoc.metadata?.presentationCache) {
+      const cached = normalizedDoc.metadata.presentationCache;
+      console.log('✅ Returning cached presentation slides');
+      return res.json({
+        success: true,
+        slides: cached.slides,
+        chartSuggestions: cached.chartSuggestions || [],
+        abbreviations: cached.abbreviations || {},
+        fromCache: true,
+        cachedAt: cached.cachedAt
+      });
+    }
 
     const analysis = normalizedDoc.analysis || {};
     const metadata = normalizedDoc.metadata || {};
@@ -253,15 +267,37 @@ Format your response as a JSON array of slide objects with this structure:
 
     console.log('✅ Generated slides:', slidesData.slides?.length || 0);
 
+    // Cache the presentation data for future requests
+    try {
+      if (!normalizedDoc.metadata) normalizedDoc.metadata = {};
+      normalizedDoc.metadata.presentationCache = {
+        slides: slidesData.slides || [],
+        chartSuggestions,
+        abbreviations: abbreviationDict,
+        cachedAt: new Date().toISOString(),
+        slideCount: slidesData.slides?.length || 0
+      };
+      
+      // Save back to Firebase
+      const { saveDocumentToFirebase } = await import('../services/firebaseStorageService.js');
+      await saveDocumentToFirebase(documentId, { document: normalizedDoc });
+      console.log('💾 Cached presentation slides');
+    } catch (cacheError) {
+      console.warn('⚠️ Failed to cache presentation:', cacheError.message);
+    }
+
     res.json({
       success: true,
       slides: slidesData.slides || [],
+      chartSuggestions,
+      abbreviations: abbreviationDict,
       metadata: {
         documentId,
         documentTitle: normalizedDoc.filename,
         generatedAt: new Date().toISOString(),
         slideCount: slidesData.slides?.length || 0
-      }
+      },
+      fromCache: false
     });
 
   } catch (error) {

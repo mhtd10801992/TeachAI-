@@ -250,17 +250,23 @@ function ImageGallerySection({ document, analysis, documentId }) {
   }, [isDragging, dragStartY, dragStartHeight]);
 
   // Analyze selected images with AI
-  const analyzeSelectedImages = async () => {
+  const analyzeSelectedImages = async (forceRefresh = false) => {
     if (selectedImages.length === 0) return;
     
     setAnalyzingImages(true);
     try {
       const response = await API.post('/ai/analyze-images', {
         documentId,
-        imageIndices: selectedImages
+        imageIndices: selectedImages,
+        forceRefresh
       });
       
       setImageAnalysisResults(response.data?.results || {});
+      
+      // Show cache status message
+      if (response.data?.fromCache && !forceRefresh) {
+        console.log('✅ Loaded image analysis from cache');
+      }
     } catch (error) {
       console.error('Error analyzing images:', error);
       alert('Failed to analyze images. Please try again.');
@@ -1703,18 +1709,24 @@ function PresentationSlidesSection({ document, analysis, documentId, mindMap, on
   const [editMode, setEditMode] = useState(false);
   const [editedSlides, setEditedSlides] = useState(null);
   const [showRevealPresentation, setShowRevealPresentation] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
 
-  const generateSlides = async () => {
+  const generateSlides = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
+    setFromCache(false);
     try {
       console.log('🎯 Generating presentation slides...');
-      const response = await API.post('/presentation/generate', { documentId });
+      const response = await API.post('/presentation/generate', { 
+        documentId,
+        forceRefresh 
+      });
       
       if (response.data && response.data.success) {
         setSlides(response.data.slides);
         setEditedSlides(JSON.parse(JSON.stringify(response.data.slides)));
-        console.log('✅ Slides generated:', response.data.slides.length);
+        setFromCache(response.data.fromCache || false);
+        console.log(`✅ Slides ${response.data.fromCache ? 'loaded from cache' : 'generated'}:`, response.data.slides.length);
       } else {
         setError('Failed to generate slides');
       }
@@ -1769,15 +1781,46 @@ function PresentationSlidesSection({ document, analysis, documentId, mindMap, on
             key metrics, equations, and important insights.
           </p>
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
-              onClick={generateSlides}
+              onClick={() => generateSlides(false)}
               disabled={loading}
               className="btn btn-primary"
               style={{ fontSize: '14px', padding: '10px 20px' }}
             >
               {loading ? '⏳ Generating Slides...' : '🎯 Generate Presentation'}
             </button>
+            
+            {slides && fromCache && (
+              <div style={{
+                padding: '6px 12px',
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: '8px',
+                fontSize: '12px',
+                color: '#10b981',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                💾 Loaded from cache
+                <button
+                  onClick={() => generateSlides(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#10b981',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    textDecoration: 'underline',
+                    padding: 0
+                  }}
+                  title="Regenerate fresh slides"
+                >
+                  🔄 Refresh
+                </button>
+              </div>
+            )}
 
             {slides && (
               <>

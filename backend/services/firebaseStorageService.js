@@ -234,14 +234,38 @@ export const listMindMapsFromFirebase = async () => {
 };
 
 // Save document metadata to Firebase Storage or local fallback
-export const saveDocumentToFirebase = async (documentData) => {
+export const saveDocumentToFirebase = async (documentDataOrId, optionalData = null) => {
   try {
-    // Invalidate cache since we're adding a new document
+    // Support both calling patterns:
+    // saveDocumentToFirebase(documentData) or saveDocumentToFirebase(documentId, documentData)
+    let documentData, documentId;
+    
+    if (typeof documentDataOrId === 'string' && optionalData) {
+      // Called with (documentId, documentData)
+      documentId = documentDataOrId;
+      documentData = optionalData;
+      if (!documentData.document) {
+        documentData = { document: documentData };
+      }
+      // Ensure ID is set
+      if (!documentData.document.id) {
+        documentData.document.id = documentId;
+      }
+    } else {
+      // Called with (documentData) - original pattern
+      documentData = documentDataOrId;
+      documentId = documentData.document?.id || documentData.id;
+    }
+    
+    if (!documentId) {
+      throw new Error('Document ID is required');
+    }
+    
+    // Invalidate cache since we're updating a document
     invalidateDocumentsCache();
     
     if (useFirebase && bucket) {
       // Firebase Storage
-      const documentId = documentData.document.id;
       const fileName = `${FIREBASE_PATHS.DOCUMENTS}${documentId}.json`;
       
       const file = bucket.file(fileName);
@@ -267,7 +291,6 @@ export const saveDocumentToFirebase = async (documentData) => {
     } else {
       // Local Storage Fallback
       await initializeLocalStorage();
-      const documentId = documentData.document.id;
       const fileName = path.join(LOCAL_STORAGE.DOCUMENTS, `${documentId}.json`);
       
       await fs.writeFile(fileName, JSON.stringify(documentData, null, 2));

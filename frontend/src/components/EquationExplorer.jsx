@@ -294,8 +294,16 @@ export default function EquationExplorer({ documentId }) {
           showing how they relate to each other in context.
         </div>
 
-        {/* Combined Content Blocks */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        {/* Combined Content Blocks - Scrollable */}
+        <div style={{ 
+          maxHeight: '600px',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '12px',
+          padding: '8px'
+        }}>
           {equations.length > 0 && equations.map((eq, idx) => {
             // Find related numeric data from same paragraph/sentence
             const relatedNumbers = numericData.filter(num => 
@@ -307,35 +315,44 @@ export default function EquationExplorer({ documentId }) {
               <div
                 key={`context-${idx}`}
                 style={{
-                  padding: '28px',
+                  padding: '16px',
                   background: 'rgba(30, 30, 50, 0.6)',
                   backdropFilter: 'blur(10px)',
                   border: '1px solid rgba(99, 102, 241, 0.3)',
-                  borderRadius: '20px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.3)'
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)';
+                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(30, 30, 50, 0.6)';
+                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
                 }}
               >
                 {/* Context Header */}
                 <div style={{
-                  fontSize: '12px',
+                  fontSize: '10px',
                   fontWeight: '700',
                   color: 'var(--primary-color)',
-                  marginBottom: '20px',
+                  marginBottom: '12px',
                   textTransform: 'uppercase',
                   letterSpacing: '1px'
                 }}>
-                  Context Block #{idx + 1}
+                  Equation #{idx + 1}
                 </div>
                 {/* Equation Display */}
                 <div style={{
-                  fontSize: '22px',
-                  marginBottom: '20px',
-                  padding: '20px',
+                  fontSize: '18px',
+                  marginBottom: '12px',
+                  padding: '12px',
                   background: 'rgba(0,0,0,0.4)',
-                  borderRadius: '12px',
+                  borderRadius: '8px',
                   textAlign: 'center',
                   color: '#e0e7ff',
-                  minHeight: '70px',
+                  minHeight: '50px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -347,26 +364,26 @@ export default function EquationExplorer({ documentId }) {
                 {/* Explanation */}
                 {eq.explanation && (
                   <div style={{
-                    padding: '16px',
+                    padding: '10px',
                     background: 'rgba(16, 185, 129, 0.12)',
                     border: '1px solid rgba(16, 185, 129, 0.25)',
-                    borderRadius: '10px',
-                    marginBottom: '16px'
+                    borderRadius: '8px',
+                    marginBottom: '10px'
                   }}>
                     <div style={{ 
-                      fontSize: '12px', 
+                      fontSize: '10px', 
                       color: '#a7f3d0',
-                      marginBottom: '8px',
+                      marginBottom: '6px',
                       fontWeight: '700',
                       textTransform: 'uppercase',
                       letterSpacing: '0.8px'
                     }}>
-                      💡 What This Means
+                      💡 Explanation
                     </div>
                     <div style={{ 
-                      fontSize: '15px', 
+                      fontSize: '13px', 
                       color: '#d1fae5',
-                      lineHeight: '1.7'
+                      lineHeight: '1.5'
                     }}>
                       {typeof eq.explanation === 'string' ? eq.explanation : eq.explanation.short}
                     </div>
@@ -376,28 +393,28 @@ export default function EquationExplorer({ documentId }) {
                 {/* Related Numeric Data */}
                 {relatedNumbers.length > 0 && (
                   <div style={{
-                    padding: '16px',
+                    padding: '10px',
                     background: 'rgba(16, 185, 129, 0.12)',
                     border: '1px solid rgba(16, 185, 129, 0.3)',
-                    borderRadius: '12px',
-                    marginBottom: '20px'
+                    borderRadius: '8px',
+                    marginBottom: '10px'
                   }}>
                     <div style={{ 
-                      fontSize: '12px', 
+                      fontSize: '10px', 
                       color: '#a7f3d0',
-                      marginBottom: '12px',
+                      marginBottom: '8px',
                       fontWeight: '700',
                       textTransform: 'uppercase',
                       letterSpacing: '0.8px'
                     }}>
-                      📊 Related Numeric Data ({relatedNumbers.length})
+                      📊 Related Data ({relatedNumbers.length})
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                       {relatedNumbers.map((num, nIdx) => (
                         <div
                           key={nIdx}
                           style={{
-                            padding: '10px 16px',
+                            padding: '6px 10px',
                             background: 'rgba(16, 185, 129, 0.2)',
                             border: '1px solid rgba(16, 185, 129, 0.4)',
                             borderRadius: '10px',
@@ -407,7 +424,7 @@ export default function EquationExplorer({ documentId }) {
                           }}
                         >
                           <span style={{
-                            fontSize: '18px',
+                            fontSize: '14px',
                             fontWeight: '700',
                             fontFamily: 'monospace',
                             color: '#10b981'
@@ -415,7 +432,7 @@ export default function EquationExplorer({ documentId }) {
                             {num.value}{num.unit ? ` ${num.unit}` : ''}
                           </span>
                           <span style={{
-                            fontSize: '10px',
+                            fontSize: '9px',
                             color: '#a7f3d0',
                             textTransform: 'uppercase',
                             letterSpacing: '0.5px'
@@ -430,23 +447,23 @@ export default function EquationExplorer({ documentId }) {
 
                 {/* Context Block */}
                 <div style={{
-                  padding: '16px',
+                  padding: '10px',
                   background: 'rgba(0,0,0,0.25)',
-                  borderRadius: '10px',
-                  borderLeft: '4px solid rgba(99, 102, 241, 0.6)'
+                  borderRadius: '8px',
+                  borderLeft: '3px solid rgba(99, 102, 241, 0.6)'
                 }}>
                   <div style={{ 
-                    fontSize: '12px', 
+                    fontSize: '10px', 
                     color: 'var(--text-secondary)',
-                    marginBottom: '10px',
+                    marginBottom: '6px',
                     fontWeight: '600'
                   }}>
-                    📖 Full Context from Document
+                    📖 Context
                   </div>
                   <div style={{ 
-                    fontSize: '14px', 
+                    fontSize: '12px', 
                     color: 'rgba(226,232,240,0.95)',
-                    lineHeight: '1.7',
+                    lineHeight: '1.5',
                     fontStyle: 'italic'
                   }}>
                     "{eq.sentence || eq.context}"
@@ -454,25 +471,25 @@ export default function EquationExplorer({ documentId }) {
                   
                   {/* Expandable full paragraph */}
                   {eq.paragraph && eq.paragraph !== eq.sentence && (
-                    <details style={{ marginTop: '12px' }}>
+                    <details style={{ marginTop: '8px' }}>
                       <summary style={{
-                        fontSize: '12px',
+                        fontSize: '10px',
                         color: 'rgba(148, 163, 184, 0.9)',
                         cursor: 'pointer',
-                        padding: '6px 0',
+                        padding: '4px 0',
                         userSelect: 'none',
                         fontWeight: '500'
                       }}>
                         View full paragraph ▼
                       </summary>
                       <div style={{
-                        marginTop: '10px',
-                        padding: '12px',
+                        marginTop: '6px',
+                        padding: '8px',
                         background: 'rgba(0,0,0,0.2)',
-                        borderRadius: '8px',
-                        fontSize: '13px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
                         color: 'rgba(203,213,225,0.9)',
-                        lineHeight: '1.7'
+                        lineHeight: '1.5'
                       }}>
                         {eq.paragraph}
                       </div>
@@ -491,24 +508,24 @@ export default function EquationExplorer({ documentId }) {
             );
           }).length > 0 && (
             <div style={{
-              padding: '28px',
+              padding: '16px',
               background: 'rgba(30, 50, 30, 0.6)',
               backdropFilter: 'blur(10px)',
               border: '1px solid rgba(16, 185, 129, 0.3)',
-              borderRadius: '20px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)'
+              borderRadius: '12px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
             }}>
               <div style={{
-                fontSize: '12px',
+                fontSize: '10px',
                 fontWeight: '700',
                 color: '#10b981',
-                marginBottom: '20px',
+                marginBottom: '12px',
                 textTransform: 'uppercase',
                 letterSpacing: '1px'
               }}>
-                📊 Additional Numeric Data (Not in Equation Contexts)
+                📊 Additional Numeric Data
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
               {numericData.filter(num => {
                 return !equations.some(eq => 
                   num.paragraphIndex === eq.paragraphIndex ||
@@ -518,18 +535,18 @@ export default function EquationExplorer({ documentId }) {
                 <div
                   key={`standalone-${idx}`}
                   style={{
-                    padding: '16px 20px',
+                    padding: '10px 14px',
                     background: 'rgba(16, 185, 129, 0.15)',
                     border: '1px solid rgba(16, 185, 129, 0.4)',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     display: 'inline-flex',
                     flexDirection: 'column',
-                    gap: '8px',
-                    minWidth: '180px'
+                    gap: '4px',
+                    minWidth: '120px'
                   }}
                 >
                   <div style={{
-                    fontSize: '24px',
+                    fontSize: '16px',
                     fontWeight: '700',
                     fontFamily: 'monospace',
                     color: '#10b981'
@@ -537,7 +554,7 @@ export default function EquationExplorer({ documentId }) {
                     {num.value}{num.unit ? ` ${num.unit}` : ''}
                   </div>
                   <div style={{
-                    fontSize: '10px',
+                    fontSize: '9px',
                     color: '#a7f3d0',
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px'
@@ -546,9 +563,9 @@ export default function EquationExplorer({ documentId }) {
                   </div>
                   {num.explanation && (
                     <div style={{
-                      fontSize: '11px',
+                      fontSize: '10px',
                       color: 'rgba(226,232,240,0.8)',
-                      lineHeight: '1.5',
+                      lineHeight: '1.4',
                       marginTop: '4px'
                     }}>
                       {num.explanation}

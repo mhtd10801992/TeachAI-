@@ -131,48 +131,21 @@ export default function FileUploader({ onViewHistory }) {
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-      {/* Drag & Drop Upload Area */}
-      <div 
-        className="glass-card"
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        style={{
-          padding: '40px',
-          textAlign: 'center',
-          borderRadius: '20px',
-          border: dragOver ? '2px dashed var(--accent-blue)' : '2px dashed rgba(255, 255, 255, 0.2)',
-          background: dragOver ? 'rgba(79, 70, 229, 0.1)' : 'var(--glass-bg)',
-          transition: 'all 0.3s ease',
-          marginBottom: '25px',
-          cursor: 'pointer'
-        }}
-      >
-        <div style={{
-          fontSize: '48px',
-          marginBottom: '20px',
-          opacity: dragOver ? 1 : 0.6
+    <div>
+      {/* Compact Upload Area */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '10px', 
+        alignItems: 'center', 
+        justifyContent: file ? 'flex-start' : 'center',
+        marginBottom: file ? '12px' : '0' 
+      }}>
+        <label className="btn btn-primary" style={{ 
+          cursor: 'pointer',
+          padding: '10px 20px',
+          fontSize: '14px',
+          flexShrink: 0
         }}>
-          📁
-        </div>
-        
-        <h3 style={{ 
-          marginBottom: '12px',
-          color: dragOver ? 'var(--accent-blue)' : 'var(--text-primary)'
-        }}>
-          {dragOver ? 'Drop your file here!' : 'Drag & drop your document'}
-        </h3>
-        
-        <p style={{ 
-          color: 'var(--text-secondary)', 
-          marginBottom: '25px',
-          fontSize: '14px'
-        }}>
-          Supports PDF, DOC, DOCX, TXT files up to 10MB
-        </p>
-
-        <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
           <input
             type="file"
             onChange={(e) => setFile(e.target.files[0])}
@@ -180,164 +153,82 @@ export default function FileUploader({ onViewHistory }) {
             style={{ display: 'none' }}
             accept=".pdf,.doc,.docx,.txt"
           />
-          Choose File
+          📁 Choose File
         </label>
-      </div>
-
-      {/* Selected File Display */}
-      {file && (
-        <div className="glass-card animate-fadeInUp" style={{
-          padding: '20px',
-          borderRadius: '16px',
-          marginBottom: '20px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{
-              width: '50px',
-              height: '50px',
-              background: 'var(--primary-gradient)',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px'
+        
+        {file && (
+          <>
+            <div style={{ 
+              flex: 1,
+              padding: '8px 12px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
             }}>
-              📄
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                {file.name}
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                {formatFileSize(file.size)} • {file.type || 'Unknown type'}
-              </div>
+              {file.name}
             </div>
             <button 
               onClick={() => setFile(null)}
-              className="btn btn-secondary"
+              className="btn btn-outline"
               style={{ 
-                padding: '8px 12px',
-                borderRadius: '8px'
+                padding: '10px 16px',
+                fontSize: '14px'
               }}
             >
               ✕
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* Upload Button */}
-      {file && (
-        <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-          <button 
-            onClick={uploadFile}
-            disabled={!file || loading}
-            className={`btn ${loading ? 'btn-secondary' : 'btn-primary'}`}
-            style={{
-              padding: '15px 30px',
-              fontSize: '16px',
-              borderRadius: '15px'
-            }}
-          >
-            {loading ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div className="animate-pulse" style={{
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  background: 'var(--primary-gradient)'
-                }}></div>
-                Processing...
-              </span>
-            ) : (
-              '🚀 Upload & Process'
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Loading Progress */}
-      {loading && (
-        <div className="glass-card animate-fadeInUp" style={{
-          padding: '25px',
-          borderRadius: '16px',
-          marginBottom: '20px',
-          textAlign: 'center'
-        }}>
-          <div style={{ marginBottom: '15px' }}>
-            <h4 style={{ marginBottom: '8px' }}>🧠 AI Processing in Progress</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-              Analyzing document content and extracting insights...
-            </p>
-          </div>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: '70%' }}></div>
-          </div>
-        </div>
+      {file && !response && (
+        <button 
+          onClick={uploadFile}
+          disabled={!file || loading}
+          className={`btn ${loading ? 'btn-secondary' : 'btn-success'}`}
+          style={{
+            padding: '10px 20px',
+            fontSize: '14px',
+            width: '100%'
+          }}
+        >
+          {loading ? '⏳ Processing...' : '🚀 Upload & Analyze'}
+        </button>
       )}
 
       {/* Error Display */}
       {error && (
-        <div className="glass-card animate-fadeInUp" style={{
-          padding: '20px',
-          borderRadius: '16px',
-          marginBottom: '20px',
-          border: '1px solid var(--error)'
+        <div style={{
+          padding: '12px',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: '8px',
+          marginTop: '12px',
+          fontSize: '13px',
+          color: '#ef4444'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-              borderRadius: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px'
-            }}>
-              ⚠️
-            </div>
-            <div>
-              <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--error)' }}>
-                Upload Failed
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                {error}
-              </div>
-            </div>
-          </div>
+          ⚠️ {error}
         </div>
       )}
 
       {/* Success Response */}
       {response && (
-        <div>
-          <div className="glass-card animate-fadeInUp" style={{
-            padding: '25px',
-            borderRadius: '16px',
-            border: '1px solid var(--success)',
-            marginBottom: '20px'
+        <div style={{ marginTop: '12px' }}>
+          <div style={{
+            padding: '12px',
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            borderRadius: '8px',
+            marginBottom: '12px',
+            fontSize: '13px',
+            color: '#10b981'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <div style={{
-                width: '50px',
-                height: '50px',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px'
-              }}>
-                ✅
-              </div>
-              <div>
-                <h4 style={{ margin: 0, color: 'var(--success)' }}>Upload Successful!</h4>
-                <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>
-                  Your document has been processed and analyzed by our AI
-                </p>
-              </div>
-            </div>
+            ✅ Upload successful!
           </div>
 
           {/* Document Summary Card */}
@@ -346,15 +237,13 @@ export default function FileUploader({ onViewHistory }) {
           )}
 
           {/* AI Analysis Display */}
-          <div style={{ marginTop: '20px' }}>
-            <ErrorBoundary>
-              <AIAnalysisDisplay 
-                response={response} 
-                onUpdateAnalysis={handleAnalysisUpdate}
-                onViewHistory={onViewHistory}
-              />
-            </ErrorBoundary>
-          </div>
+          <ErrorBoundary>
+            <AIAnalysisDisplay 
+              response={response} 
+              onUpdateAnalysis={handleAnalysisUpdate}
+              onViewHistory={onViewHistory}
+            />
+          </ErrorBoundary>
         </div>
       )}
     </div>

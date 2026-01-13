@@ -27,6 +27,7 @@ import webRoutes from "./routes/web.js";
 import metadataRoutes from "./routes/metadata.js";
 import mindMapRoutes from "./routes/mindmap.js";
 import chartRoutes from "./routes/charts.js";
+import presentationRoutes from "./routes/presentation.js";
 import { initializeFirebaseStorage } from "./services/firebaseStorageService.js";
 import { initializeDocumentCache } from "./controllers/documentController.js";
 
@@ -34,7 +35,25 @@ const app = express();
 
 // Enhanced CORS configuration
 const corsOptions = {
-  origin: ['https://try1-7d848.web.app', 'https://try1-7d848.firebaseapp.com', 'http://localhost:5173'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow production Firebase domains
+    const allowedDomains = [
+      'https://try1-7d848.web.app',
+      'https://try1-7d848.firebaseapp.com',
+      'http://localhost:5173',
+      'http://localhost:4000'
+    ];
+    
+    // Allow any GitHub Codespaces domain
+    if (origin.includes('.app.github.dev') || origin.includes('localhost') || allowedDomains.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -93,6 +112,7 @@ app.use("/api/web", webRoutes);
 app.use("/api/metadata", metadataRoutes);
 app.use("/api/mindmap", mindMapRoutes);
 app.use("/api/charts", chartRoutes);
+app.use("/api/presentation", presentationRoutes);
 
 const startServer = async () => {
   try {

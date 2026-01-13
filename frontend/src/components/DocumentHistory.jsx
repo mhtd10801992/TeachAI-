@@ -207,356 +207,336 @@ export default function DocumentHistory({ onReview }) {
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      {/* Header */}
-      <div className="glass-card" style={{
-        padding: '30px',
-        borderRadius: '20px',
-        marginBottom: '25px',
-        textAlign: 'center'
+    <div>
+      {/* Search Bar - Compact */}
+      <div style={{
+        display: 'flex',
+        gap: '10px',
+        marginBottom: '15px',
+        background: 'rgba(102, 126, 234, 0.08)',
+        padding: '12px',
+        borderRadius: '12px',
+        border: '1px solid rgba(102, 126, 234, 0.2)'
       }}>
-        <div style={{
-          width: '60px',
-          height: '60px',
-          background: 'var(--primary-gradient)',
-          borderRadius: '15px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '28px',
-          margin: '0 auto 15px'
-        }}>
-          📚
-        </div>
-        <h2 style={{
-          marginBottom: '8px',
-          background: 'var(--primary-gradient)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text'
-        }}>
-          Document History & Analysis Ledger
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-          View and manage all your uploaded documents and their AI analysis results
-        </p>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search documents..."
+          className="input"
+          style={{ 
+            flex: 1,
+            padding: '8px 12px',
+            fontSize: '14px',
+            background: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '8px',
+            color: '#fff'
+          }}
+          onKeyPress={(e) => e.key === 'Enter' && searchDocuments()}
+        />
+        <button 
+          onClick={searchDocuments} 
+          style={{
+            padding: '8px 16px',
+            fontSize: '14px',
+            background: 'linear-gradient(135deg, #667eea, #764ba2)',
+            border: 'none',
+            borderRadius: '8px',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '500',
+            transition: 'transform 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          🔍
+        </button>
+        <button 
+          onClick={() => {
+            setSearchQuery('');
+            fetchDocuments();
+          }}
+          style={{
+            padding: '8px 16px',
+            fontSize: '14px',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '8px',
+            color: '#ccc',
+            cursor: 'pointer',
+            fontWeight: '500',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+            e.currentTarget.style.color = '#fff';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+            e.currentTarget.style.color = '#ccc';
+          }}
+        >
+          Clear
+        </button>
       </div>
 
-      {/* Statistics Cards */}
+      {/* Stats Bar - Compact */}
       {stats && (
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '20px',
-          marginBottom: '25px'
+          display: 'flex',
+          gap: '10px',
+          marginBottom: '15px',
+          flexWrap: 'wrap'
         }}>
-          <StatCard
-            icon="📊"
-            title="Total Documents"
-            value={stats.totalDocuments}
-            color="var(--primary-gradient)"
-          />
-          <StatCard
-            icon="⏳"
-            title="Pending Review"
-            value={stats.pendingValidation}
-            color="linear-gradient(135deg, #f59e0b, #d97706)"
-          />
-          <StatCard
-            icon="✅"
-            title="Processed"
-            value={stats.processed}
-            color="linear-gradient(135deg, #10b981, #059669)"
-          />
-          <StatCard
-            icon="🎯"
-            title="Avg Confidence"
-            value={`${Math.round(stats.averageConfidence * 100)}%`}
-            color="var(--secondary-gradient)"
-          />
-        </div>
-      )}
-
-      {/* Search Bar */}
-      <div className="glass-card" style={{
-        padding: '20px',
-        borderRadius: '16px',
-        marginBottom: '25px'
-      }}>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '15px' }}>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search documents by filename, content, or topics..."
-            className="input"
-            style={{ flex: 1 }}
-          />
-          <button type="submit" className="btn btn-primary">
-            🔍 Search
-          </button>
-          <button 
-            type="button" 
-            onClick={() => {
-              setSearchQuery('');
-              fetchDocuments();
-            }}
-            className="btn btn-secondary"
-          >
-            Clear
-          </button>
-        </form>
-      </div>
-
-      {/* Documents List */}
-      {loading ? (
-        <div className="glass-card" style={{
-          padding: '40px',
-          textAlign: 'center',
-          borderRadius: '16px'
-        }}>
-          <div className="animate-pulse" style={{
-            width: '40px',
-            height: '40px',
-            background: 'var(--primary-gradient)',
-            borderRadius: '50%',
-            margin: '0 auto 15px'
-          }}></div>
-          <p>Loading documents...</p>
-        </div>
-      ) : error ? (
-        <div className="glass-card" style={{
-          padding: '20px',
-          borderRadius: '16px',
-          border: '1px solid var(--error)'
-        }}>
-          <p style={{ color: 'var(--error)', margin: 0 }}>
-            ⚠️ {error}
-          </p>
-        </div>
-      ) : documents.length === 0 ? (
-        <div className="glass-card" style={{
-          padding: '40px',
-          textAlign: 'center',
-          borderRadius: '16px'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '15px', opacity: 0.6 }}>
-            📁
-          </div>
-          <h3 style={{ marginBottom: '8px' }}>No documents found</h3>
-          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
-            {searchQuery ? 'Try adjusting your search terms' : 'Upload some documents to get started'}
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gap: '15px' }}>
-          {documents.map((doc, index) => (
-            <DocumentCard
-              key={doc.document.id}
-              document={doc}
-              onView={() => viewDocument(doc)}
-              onDelete={() => deleteDocument(doc.document.id)}
-              onReview={() => onReview && onReview(doc.document.id)}
-              formatDate={formatDate}
-              formatFileSize={formatFileSize}
-            />
+          {[
+            { icon: '📊', label: 'Total', value: stats.totalDocuments, color: '#667eea' },
+            { icon: '⏳', label: 'Pending', value: stats.pendingValidation, color: '#f59e0b' },
+            { icon: '✅', label: 'Done', value: stats.processed, color: '#10b981' },
+            { icon: '🎯', label: 'Confidence', value: `${Math.round(stats.averageConfidence * 100)}%`, color: '#ec4899' }
+          ].map((stat, i) => (
+            <div key={i} style={{
+              flex: '1 1 auto',
+              minWidth: '100px',
+              padding: '10px 15px',
+              background: `linear-gradient(135deg, ${stat.color}22, ${stat.color}11)`,
+              border: `1px solid ${stat.color}44`,
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '18px' }}>{stat.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '2px' }}>{stat.label}</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: stat.color }}>{stat.value}</div>
+              </div>
+            </div>
           ))}
         </div>
       )}
-    </div>
-  );
-}
 
-// Statistics Card Component
-const StatCard = ({ icon, title, value, color }) => (
-  <div className="glass-card" style={{
-    padding: '20px',
-    borderRadius: '16px',
-    textAlign: 'center'
-  }}>
-    <div style={{
-      width: '50px',
-      height: '50px',
-      background: color,
-      borderRadius: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '24px',
-      margin: '0 auto 15px'
-    }}>
-      {icon}
-    </div>
-    <div style={{ fontWeight: '600', fontSize: '24px', marginBottom: '4px' }}>
-      {value}
-    </div>
-    <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-      {title}
-    </div>
-  </div>
-);
-
-// Document Card Component
-const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, formatFileSize }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'processed': return 'var(--success)';
-      case 'pending_validation': return 'var(--warning)';
-      default: return 'var(--text-secondary)';
-    }
-  };
-
-  const getConfidenceColor = (confidence) => {
-    if (confidence >= 0.8) return 'var(--success)';
-    if (confidence >= 0.6) return 'var(--warning)';
-    return 'var(--error)';
-  };
-
-  const averageConfidence = document.document.analysis ? (
-    (document.document.analysis.summary?.confidence || 0) +
-    (document.document.analysis.topics?.confidence || 0) +
-    (document.document.analysis.entities?.confidence || 0) +
-    (document.document.analysis.sentiment?.confidence || 0)
-  ) / 4 : 0;
-
-  return (
-    <div className="glass-card animate-fadeInUp" style={{
-      padding: '20px',
-      borderRadius: '16px',
-      transition: 'all 0.3s ease'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
-        {/* File Icon */}
-        <div style={{
-          width: '60px',
-          height: '60px',
-          background: 'var(--primary-gradient)',
-          borderRadius: '12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '24px',
-          flexShrink: 0
-        }}>
-          📄
-        </div>
-
-        {/* Document Info */}
-        <div style={{ flex: 1, minWidth: '250px', maxWidth: '600px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <h4 style={{ 
-              margin: 0, 
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              flex: 1,
-              maxWidth: '100%'
-            }}>
-              {document.document.filename}
-            </h4>
-            <span style={{
-              background: getStatusColor(document.status),
-              color: 'white',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              fontSize: '10px',
-              fontWeight: '600',
-              textTransform: 'uppercase'
-            }}>
-              {document.status.replace('_', ' ')}
-            </span>
-          </div>
-          
-          <div style={{ 
-            color: 'var(--text-secondary)', 
-            fontSize: '14px',
-            marginBottom: '10px'
+      {/* Documents List - Scrollable */}
+      <div style={{
+        maxHeight: '500px',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        padding: '5px',
+        background: 'rgba(255, 255, 255, 0.02)',
+        borderRadius: '12px',
+        border: '1px solid rgba(255, 255, 255, 0.05)'
+      }}>
+        {loading ? (
+          <div style={{
+            padding: '40px',
+            textAlign: 'center',
+            color: '#aaa'
           }}>
-            {formatFileSize(document.document.size)} • 
-            Uploaded {formatDate(document.document.uploadDate)}
-          </div>
-
-          {/* Topics */}
-          {document.document.analysis?.topics?.items && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
-              {document.document.analysis.topics.items.slice(0, 3).map((topic, i) => (
-                <span key={i} style={{
-                  background: 'rgba(102, 126, 234, 0.2)',
-                  color: 'var(--accent-blue)',
-                  padding: '3px 8px',
-                  borderRadius: '12px',
-                  fontSize: '12px'
-                }}>
-                  {topic}
-                </span>
-              ))}
-              {document.document.analysis.topics.items.length > 3 && (
-                <span style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: '12px'
-                }}>
-                  +{document.document.analysis.topics.items.length - 3} more
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Confidence Score */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Avg Confidence:
-            </span>
             <div style={{
-              background: getConfidenceColor(averageConfidence),
-              color: 'white',
-              padding: '2px 6px',
-              borderRadius: '8px',
-              fontSize: '11px',
-              fontWeight: '600'
-            }}>
-              {Math.round(averageConfidence * 100)}%
-            </div>
+              width: '30px',
+              height: '30px',
+              border: '3px solid rgba(102, 126, 234, 0.3)',
+              borderTop: '3px solid #667eea',
+              borderRadius: '50%',
+              margin: '0 auto 10px',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <p style={{ margin: 0, fontSize: '14px' }}>Loading...</p>
           </div>
-        </div>
+        ) : error ? (
+          <div style={{
+            padding: '20px',
+            textAlign: 'center',
+            color: '#ef4444',
+            fontSize: '14px'
+          }}>
+            ⚠️ {error}
+          </div>
+        ) : documents.length === 0 ? (
+          <div style={{
+            padding: '40px',
+            textAlign: 'center',
+            color: '#888'
+          }}>
+            <div style={{ fontSize: '36px', marginBottom: '10px', opacity: 0.4 }}>📁</div>
+            <p style={{ margin: 0, fontSize: '14px' }}>
+              {searchQuery ? 'No documents found' : 'Upload documents to get started'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {documents.map((doc) => {
+              const averageConfidence = doc.document.analysis ? (
+                (doc.document.analysis.summary?.confidence || 0) +
+                (doc.document.analysis.topics?.confidence || 0) +
+                (doc.document.analysis.entities?.confidence || 0) +
+                (doc.document.analysis.sentiment?.confidence || 0)
+              ) / 4 : 0;
 
-        {/* Action Buttons */}
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '8px',
-          minWidth: '200px',
-          flexShrink: 0
-        }}>
-          {onReview && (
-            <button 
-              onClick={onReview}
-              className="btn btn-secondary"
-              style={{ 
-                padding: '8px 16px', 
-                fontSize: '13px',
-                background: 'var(--primary-gradient)',
-                border: 'none'
-              }}
-            >
-              🔍 Comprehensive Review
-            </button>
-          )}
-          <button 
-            onClick={onView}
-            className="btn btn-primary"
-            style={{ padding: '8px 16px', fontSize: '13px' }}
-          >
-            📖 View Analysis
-          </button>
-          <button 
-            onClick={onDelete}
-            className="btn btn-danger"
-            style={{ padding: '8px 16px', fontSize: '13px' }}
-          >
-            🗑️ Delete
-          </button>
-        </div>
+              const confColor = averageConfidence >= 0.8 ? '#10b981' : averageConfidence >= 0.6 ? '#f59e0b' : '#ef4444';
+
+              return (
+                <div 
+                  key={doc.document.id}
+                  style={{
+                    padding: '12px 15px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(102, 126, 234, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(102, 126, 234, 0.3)';
+                    e.currentTarget.style.transform = 'translateX(3px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }}
+                >
+                  {/* Icon */}
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    flexShrink: 0
+                  }}>
+                    📄
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: '#fff',
+                      marginBottom: '4px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {doc.document.filename}
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#aaa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <span>{formatFileSize(doc.document.size)}</span>
+                      <span>•</span>
+                      <span>{formatDate(doc.document.uploadDate)}</span>
+                      <span>•</span>
+                      <span style={{
+                        background: `${confColor}33`,
+                        color: confColor,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: '600'
+                      }}>
+                        {Math.round(averageConfidence * 100)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReview && onReview(doc.document.id);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        transition: 'transform 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      🔍 Review
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        viewDocument(doc);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        background: 'rgba(102, 126, 234, 0.2)',
+                        border: '1px solid rgba(102, 126, 234, 0.3)',
+                        borderRadius: '6px',
+                        color: '#a5b4fc',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(102, 126, 234, 0.3)';
+                        e.currentTarget.style.color = '#c7d2fe';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(102, 126, 234, 0.2)';
+                        e.currentTarget.style.color = '#a5b4fc';
+                      }}
+                    >
+                      View
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteDocument(doc.document.id);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '12px',
+                        background: 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '6px',
+                        color: '#fca5a5',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                        e.currentTarget.style.color = '#fecaca';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                        e.currentTarget.style.color = '#fca5a5';
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
-};
+}

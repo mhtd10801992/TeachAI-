@@ -3,6 +3,7 @@ import API from '../api/api';
 import ConceptGraphViewer from './ConceptGraphViewer';
 import EquationExplorer from './EquationExplorer';
 import AIChartGenerator from './AIChartGenerator';
+import RevealPresentation from './RevealPresentation';
 
 // Research Paper Style Components
 const ResearchTable = ({ title, headers, rows, caption }) => (
@@ -1693,6 +1694,384 @@ function DocumentParserSection({ document, analysis, documentId }) {
   );
 }
 
+// Presentation Slides Section Component
+function PresentationSlidesSection({ document, analysis, documentId, mindMap, onGenerateMindMap }) {
+  const [slides, setSlides] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedSlide, setSelectedSlide] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [editedSlides, setEditedSlides] = useState(null);
+  const [showRevealPresentation, setShowRevealPresentation] = useState(false);
+
+  const generateSlides = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      console.log('🎯 Generating presentation slides...');
+      const response = await API.post('/presentation/generate', { documentId });
+      
+      if (response.data && response.data.success) {
+        setSlides(response.data.slides);
+        setEditedSlides(JSON.parse(JSON.stringify(response.data.slides)));
+        console.log('✅ Slides generated:', response.data.slides.length);
+      } else {
+        setError('Failed to generate slides');
+      }
+    } catch (err) {
+      console.error('❌ Error generating slides:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to generate slides');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportAsPPTX = () => {
+    alert('PowerPoint export feature coming soon! For now, you can copy the content from each slide.');
+  };
+
+  const exportAsJSON = () => {
+    const dataStr = JSON.stringify(editedSlides || slides, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = `presentation-${documentId}.json`;
+    const linkElement = window.document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const updateSlide = (slideIndex, field, value) => {
+    const updated = [...editedSlides];
+    updated[slideIndex] = { ...updated[slideIndex], [field]: value };
+    setEditedSlides(updated);
+  };
+
+  const updateBullet = (slideIndex, bulletIndex, value) => {
+    const updated = [...editedSlides];
+    updated[slideIndex].bullets[bulletIndex] = value;
+    setEditedSlides(updated);
+  };
+
+  const currentSlide = (editMode ? editedSlides : slides)?.[selectedSlide];
+
+  return (
+    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <ResearchSection title="📊 AI-Generated Presentation Slides">
+        <div style={{ 
+          marginBottom: '25px', 
+          padding: '20px', 
+          background: 'rgba(102, 126, 234, 0.1)', 
+          borderRadius: '12px',
+          border: '1px solid rgba(102, 126, 234, 0.3)'
+        }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '15px' }}>
+            Generate presentation slides using AI analysis of your document, including mind map topics, 
+            key metrics, equations, and important insights.
+          </p>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              onClick={generateSlides}
+              disabled={loading}
+              className="btn btn-primary"
+              style={{ fontSize: '14px', padding: '10px 20px' }}
+            >
+              {loading ? '⏳ Generating Slides...' : '🎯 Generate Presentation'}
+            </button>
+
+            {slides && (
+              <>
+                <button
+                  onClick={() => setShowRevealPresentation(true)}
+                  className="btn btn-primary"
+                  style={{ fontSize: '14px', padding: '10px 20px' }}
+                >
+                  🎬 Present (Fullscreen)
+                </button>
+
+                <button
+                  onClick={() => setEditMode(!editMode)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '14px', padding: '10px 20px' }}
+                >
+                  {editMode ? '👁️ Preview Mode' : '✏️ Edit Mode'}
+                </button>
+
+                <button
+                  onClick={exportAsJSON}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '14px', padding: '10px 20px' }}
+                >
+                  📥 Export as JSON
+                </button>
+
+                <button
+                  onClick={exportAsPPTX}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '14px', padding: '10px 20px' }}
+                >
+                  📊 Export as PowerPoint (Coming Soon)
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div style={{
+            padding: '15px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            color: '#ef4444',
+            marginBottom: '20px',
+            fontSize: '14px'
+          }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {slides && slides.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '20px' }}>
+            {/* Slide Thumbnails */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '5px', color: 'var(--text-secondary)' }}>
+                Slides ({slides.length})
+              </h3>
+              {slides.map((slide, index) => (
+                <div
+                  key={index}
+                  onClick={() => setSelectedSlide(index)}
+                  style={{
+                    padding: '15px',
+                    background: selectedSlide === index 
+                      ? 'rgba(102, 126, 234, 0.2)' 
+                      : 'rgba(255, 255, 255, 0.05)',
+                    border: selectedSlide === index 
+                      ? '2px solid rgba(102, 126, 234, 0.5)' 
+                      : '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: '600', marginBottom: '5px' }}>
+                    Slide {slide.slideNumber}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {slide.title}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Slide Content */}
+            {currentSlide && (
+              <div className="glass-card" style={{ padding: '30px', minHeight: '500px' }}>
+                {editMode ? (
+                  <div>
+                    <input
+                      type="text"
+                      value={currentSlide.title}
+                      onChange={(e) => updateSlide(selectedSlide, 'title', e.target.value)}
+                      className="input"
+                      style={{ 
+                        fontSize: '24px', 
+                        fontWeight: '600', 
+                        marginBottom: '20px',
+                        width: '100%'
+                      }}
+                    />
+
+                    <h4 style={{ fontSize: '16px', marginBottom: '10px', color: 'var(--text-secondary)' }}>
+                      Key Points:
+                    </h4>
+                    {currentSlide.bullets?.map((bullet, idx) => (
+                      <div key={idx} style={{ marginBottom: '10px' }}>
+                        <textarea
+                          value={bullet}
+                          onChange={(e) => updateBullet(selectedSlide, idx, e.target.value)}
+                          className="textarea"
+                          rows="2"
+                          style={{ width: '100%', fontSize: '14px' }}
+                        />
+                      </div>
+                    ))}
+
+                    {currentSlide.metrics && currentSlide.metrics.length > 0 && (
+                      <>
+                        <h4 style={{ fontSize: '16px', marginTop: '20px', marginBottom: '10px', color: 'var(--text-secondary)' }}>
+                          Key Metrics:
+                        </h4>
+                        <textarea
+                          value={currentSlide.metrics.join('\n')}
+                          onChange={(e) => updateSlide(selectedSlide, 'metrics', e.target.value.split('\n'))}
+                          className="textarea"
+                          rows="3"
+                          style={{ width: '100%', fontSize: '14px' }}
+                        />
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <h2 style={{ fontSize: '28px', fontWeight: '600', marginBottom: '25px', color: 'var(--primary-color)' }}>
+                      {currentSlide.title}
+                    </h2>
+
+                    {currentSlide.bullets && currentSlide.bullets.length > 0 && (
+                      <div style={{ marginBottom: '25px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '15px', color: 'var(--text-secondary)' }}>
+                          Key Points:
+                        </h3>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                          {currentSlide.bullets.map((bullet, idx) => (
+                            <li key={idx} style={{
+                              padding: '10px 0',
+                              paddingLeft: '25px',
+                              position: 'relative',
+                              fontSize: '15px',
+                              lineHeight: '1.7',
+                              borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                            }}>
+                              <span style={{
+                                position: 'absolute',
+                                left: 0,
+                                color: 'var(--primary-color)',
+                                fontWeight: '600'
+                              }}>•</span>
+                              {bullet}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {currentSlide.equations && currentSlide.equations.length > 0 && (
+                      <div style={{ marginBottom: '25px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '15px', color: 'var(--text-secondary)' }}>
+                          Equations:
+                        </h3>
+                        {currentSlide.equations.map((eq, idx) => (
+                          <div key={idx} style={{
+                            padding: '15px',
+                            background: 'rgba(102, 126, 234, 0.1)',
+                            borderRadius: '8px',
+                            marginBottom: '10px',
+                            fontSize: '16px',
+                            fontFamily: 'monospace'
+                          }}>
+                            {eq}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {currentSlide.metrics && currentSlide.metrics.length > 0 && (
+                      <div style={{ marginBottom: '25px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '15px', color: 'var(--text-secondary)' }}>
+                          Key Metrics:
+                        </h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                          {currentSlide.metrics.map((metric, idx) => (
+                            <div key={idx} style={{
+                              padding: '15px',
+                              background: 'rgba(16, 185, 129, 0.1)',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              borderRadius: '8px',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              color: '#10b981'
+                            }}>
+                              {metric}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {currentSlide.visualSuggestion && (
+                      <div style={{
+                        padding: '15px',
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '8px',
+                        marginTop: '20px'
+                      }}>
+                        <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#f59e0b' }}>
+                          💡 Visual Suggestion:
+                        </h4>
+                        <p style={{ fontSize: '13px', margin: 0, color: 'var(--text-secondary)' }}>
+                          {currentSlide.visualSuggestion}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Navigation */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginTop: '30px',
+                  paddingTop: '20px',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <button
+                    onClick={() => setSelectedSlide(Math.max(0, selectedSlide - 1))}
+                    disabled={selectedSlide === 0}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '14px', padding: '8px 16px' }}
+                  >
+                    ← Previous
+                  </button>
+                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                    Slide {selectedSlide + 1} of {slides.length}
+                  </div>
+                  <button
+                    onClick={() => setSelectedSlide(Math.min(slides.length - 1, selectedSlide + 1))}
+                    disabled={selectedSlide === slides.length - 1}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '14px', padding: '8px 16px' }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!slides && !loading && (
+          <div style={{
+            padding: '40px',
+            textAlign: 'center',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '12px',
+            border: '1px dashed rgba(255, 255, 255, 0.2)'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '15px', opacity: 0.5 }}>📊</div>
+            <p style={{ fontSize: '16px', color: 'var(--text-secondary)', marginBottom: '5px' }}>
+              No slides generated yet
+            </p>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+              Click "Generate Presentation" to create AI-powered slides from your document
+            </p>
+          </div>
+        )}
+      </ResearchSection>
+
+      {/* Reveal.js Fullscreen Presentation */}
+      {showRevealPresentation && slides && (
+        <RevealPresentation 
+          slides={editMode ? editedSlides : slides}
+          onClose={() => setShowRevealPresentation(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ComprehensiveDocumentReview({ documentId, onClose }) {
   const [document, setDocument] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1791,7 +2170,8 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
             { id: 'research-abstract', icon: '📝', label: 'Document Parser' },
             { id: 'research-methodology', icon: '🔬', label: 'Mind Map' },
             { id: 'image-gallery', icon: '🖼️', label: 'Images & Tables' },
-            { id: 'equations-numbers', icon: '🧮', label: 'Equations & Numbers' }
+            { id: 'equations-numbers', icon: '🧮', label: 'Equations & Numbers' },
+            { id: 'presentation-slides', icon: '📊', label: 'Presentation Slides' }
           ].map(section => (
             <button
               key={section.id}
@@ -1816,6 +2196,8 @@ export default function ComprehensiveDocumentReview({ documentId, onClose }) {
           <DocumentParserSection document={docData} analysis={analysis} documentId={documentId} />
         ) : activeSection === 'image-gallery' ? (
           <ImageGallerySection document={docData} analysis={analysis} documentId={documentId} />
+        ) : activeSection === 'presentation-slides' ? (
+          <PresentationSlidesSection document={docData} analysis={analysis} documentId={documentId} mindMap={mindMap} onGenerateMindMap={handleGenerateMindMap} />
         ) : activeSection === 'equations-numbers' ? (
           <>
             <div className="glass-card" style={{ padding: '30px' }}>

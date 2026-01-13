@@ -5,12 +5,13 @@ import { extractImagesFromPDF, renderPDFPagesAsImages, extractImagesFromWord } f
 import { extractDocumentMetadata } from '../services/documentMetadataService.js';
 import { extractFromExcel, formatExcelAsMarkdown } from '../services/excelExtractor.js';
 // import { extractTablesFromPDF, formatTablesAsText } from '../services/pdfTableExtractor.js';  // DISABLED: pdf-table-extractor has incompatible bundled pdfjs-dist
+import { detectTablesInText, formatTablesAsMarkdown, getTableSummaries } from '../services/tableDetector.js';
 import { describeImageWithAI } from '../services/imageAIService.js';
 import fs from 'fs';
 import path from 'path';
 
 // Stub function since pdf-table-extractor is disabled
-const formatTablesAsText = (tables) => '';
+const formatTablesAsText = (tables) => formatTablesAsMarkdown(tables);
 const extractTablesFromPDF = async (path) => [];
 
 export const handleUpload = async (req, res) => {
@@ -43,17 +44,29 @@ export const handleUpload = async (req, res) => {
         extractedText = `[Document processing started but text extraction failed]`;
       }
 
-      // Extract tables from PDF if it's a PDF file
+      // Detect tables in the extracted text using pattern recognition
       let extractedTables = [];
-      if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
-        // Table extraction via dedicated library is disabled due to compatibility issues
-        // Tables will be captured through image analysis and text extraction instead
+      try {
+        console.log('📊 Detecting tables in extracted text...');
+        const detectedTables = detectTablesInText(extractedText);
+        if (detectedTables.length > 0) {
+          console.log(`✅ Found ${detectedTables.length} tables in text`);
+          const tableSummaries = getTableSummaries(detectedTables);
+          tableSummaries.forEach(summary => {
+            console.log(`   📋 Table ${summary.tableNumber}: ${summary.dimensions} at ${summary.location}`);
+          });
+          extractedTables = detectedTables;
+        } else {
+          console.log('📋 No tables detected in text');
+        }
+      } catch (tableError) {
+        console.error('⚠️ Table detection error:', tableError.message);
         extractedTables = [];
       }
 
       // Combine text and table data
       const tableText = formatTablesAsText(extractedTables);
-      const combinedText = extractedText + tableText;
+      const combinedText = extractedText + (tableText ? '\n\n' + tableText : '');
       console.log(`📝 Combined text length: ${combinedText.length} characters (including ${tableText.length} characters from tables)`);
 
     // Extract and analyze images from PDF if it's a PDF file
@@ -74,8 +87,8 @@ export const handleUpload = async (req, res) => {
 
         if (images.length > 0) {
           console.log('🤖 Analyzing embedded images with AI...');
-          // Analyze first 30 images (increased limit for better coverage)
-          const imagesToAnalyze = images.slice(0, 30);
+          // Analyze first 100 images (increased limit for comprehensive coverage)
+          const imagesToAnalyze = images.slice(0, 100);
           imageAnalysisResults = await Promise.all(
             imagesToAnalyze.map(async (imageData, index) => {
               try {
@@ -136,8 +149,8 @@ export const handleUpload = async (req, res) => {
           );
         } else if (isLikelyScanned) {
           console.log('🤖 Rendering and analyzing scanned document pages...');
-          // Render up to 30 pages as images for analysis (matching our image limit)
-          const renderedPages = await renderPDFPagesAsImages(tempPath, 30);
+          // Render up to 50 pages as images for analysis
+          const renderedPages = await renderPDFPagesAsImages(tempPath, 50);
           console.log(`📄 Rendered ${renderedPages.length} pages as images`);
 
           if (renderedPages.length > 0) {
@@ -224,8 +237,8 @@ export const handleUpload = async (req, res) => {
 
         if (wordImages.length > 0) {
           console.log('🤖 Analyzing Word document images with AI...');
-          // Analyze first 30 images (increased limit for better coverage)
-          const imagesToAnalyze = wordImages.slice(0, 30);
+          // Analyze first 100 images (increased limit for comprehensive coverage)
+          const imagesToAnalyze = wordImages.slice(0, 100);
           imageAnalysisResults = await Promise.all(
             imagesToAnalyze.map(async (imageData, index) => {
               try {

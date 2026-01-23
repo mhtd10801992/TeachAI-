@@ -30,6 +30,7 @@ export default function MindMapCanvas() {
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [categorizedData, setCategorizedData] = useState(null);
   const [categorizationLoading, setCategorizationLoading] = useState(false);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   const [viewMode, setViewMode] = useState('simple'); // 'simple' or 'multi-doc'
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showRelationships, setShowRelationships] = useState(true);
@@ -85,19 +86,30 @@ export default function MindMapCanvas() {
   };
 
   const loadAvailableDocuments = async () => {
+    setDocumentsLoading(true);
     try {
       console.log('📚 Fetching documents from /api/mindmap/documents...');
-      const response = await API.get('/mindmap/documents');
+      setError(''); // Clear any previous errors
+      const response = await API.get('/mindmap/documents', {
+        timeout: 90000 // Increase timeout to 90 seconds for document loading
+      });
       console.log('✅ Documents response:', response.data);
       setAvailableDocuments(response.data.documents || []);
       if (response.data.documents && response.data.documents.length > 0) {
         console.log(`✅ Loaded ${response.data.documents.length} documents for selection`);
       } else {
         console.warn('⚠️ No documents found. Please upload some documents first.');
+        setError('No documents available. Please upload documents first.');
       }
     } catch (e) {
       console.error('❌ Error loading documents:', e);
-      setError(`Failed to load documents: ${e.message}`);
+      const errorMsg = e.code === 'ECONNABORTED' || e.message.includes('timeout')
+        ? 'Request timed out. The server is taking too long to respond. Please try again or check if the backend is running.'
+        : e.response?.data?.error || e.message || 'Failed to load documents';
+      setError(`Failed to load documents: ${errorMsg}`);
+      setAvailableDocuments([]); // Set empty array so UI doesn't break
+    } finally {
+      setDocumentsLoading(false);
     }
   };
 
@@ -589,7 +601,15 @@ export default function MindMapCanvas() {
                 background: 'rgba(0,0,0,0.3)',
                 padding: '8px'
               }}>
-                {availableDocuments.length === 0 ? (
+                {documentsLoading ? (
+                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                    <div style={{ marginBottom: '12px', fontSize: '24px' }}>⏳</div>
+                    <div style={{ marginBottom: '8px', fontWeight: '500' }}>Loading documents...</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                      Fetching available documents from the server
+                    </div>
+                  </div>
+                ) : availableDocuments.length === 0 ? (
                   <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
                     No documents found. Upload documents first.
                   </div>

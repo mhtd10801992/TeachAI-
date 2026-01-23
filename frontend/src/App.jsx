@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import FileUploader from "./components/Fileuploader";
 import ValidationDashboard from "./components/ValidationDashboard";
 import DocumentHistory from "./components/DocumentHistory";
-import DocumentSummaryCard from "./components/DocumentSummaryCard";
 import AIChat from "./components/AIChat";
 import ComprehensiveDocumentReview from "./components/ComprehensiveDocumentReview";
 import WebAnalyzer from "./components/WebAnalyzer";
@@ -12,11 +11,10 @@ import API from "./api/api";
 import './main.css';
 
 function App() {
-  const [currentView, setCurrentView] = useState('upload');
   const [documents, setDocuments] = useState([]);
   const [selectedDocumentForReview, setSelectedDocumentForReview] = useState(null);
+  const [currentView, setCurrentView] = useState('upload');
 
-  // Load documents for chat
   useEffect(() => {
     const loadDocuments = async () => {
       try {
@@ -26,259 +24,284 @@ function App() {
         console.error('Failed to load documents:', error);
       }
     };
-    
-    if (currentView === 'chat') {
-      loadDocuments();
-    }
-  }, [currentView]);
+    loadDocuments();
+  }, []);
+
+  const menuItems = [
+    { id: 'upload', icon: '📤', label: 'File Upload', badge: null },
+    { id: 'web', icon: '🌐', label: 'Web Analyzer', badge: null },
+    { id: 'history', icon: '📚', label: 'Document History', badge: documents.length },
+    { id: 'chat', icon: '💬', label: 'AI Chat', badge: null },
+    { id: 'validation', icon: '🔍', label: 'Validation', badge: null },
+    { id: 'mindmap', icon: '🧠', label: 'Mind Map', badge: null },
+    { id: 'status', icon: '🔧', label: 'System Status', badge: null },
+  ];
+
+  if (selectedDocumentForReview) {
+    return (
+      <div style={{ minHeight: '100vh', padding: '10px' }}>
+        <button
+          onClick={() => setSelectedDocumentForReview(null)}
+          style={{
+            marginBottom: '10px',
+            padding: '6px 12px',
+            fontSize: '10px',
+            background: 'rgba(168, 181, 255, 0.3)',
+            border: '1px solid rgba(168, 181, 255, 0.4)',
+            borderRadius: '5px',
+            color: '#1e1b4b',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          ← Back to Dashboard
+        </button>
+        <ComprehensiveDocumentReview 
+          documentId={selectedDocumentForReview} 
+          onClose={() => setSelectedDocumentForReview(null)}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      {/* Navigation */}
-      <nav className="glass-card animate-fadeInUp" style={{
-        margin: '20px',
-        marginBottom: '30px',
-        padding: '20px 30px',
-        borderRadius: '24px'
+    <div style={{ 
+      display: 'flex',
+      minHeight: '100vh',
+      maxHeight: '100vh',
+      overflow: 'hidden'
+    }}>
+      {/* Left Sidebar Navigation */}
+      <div style={{
+        width: '220px',
+        background: 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(10px)',
+        borderRight: '1px solid rgba(100, 100, 150, 0.15)',
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '2px 0 10px rgba(0, 0, 0, 0.05)'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        {/* Header */}
+        <div style={{
+          padding: '12px',
+          borderBottom: '1px solid rgba(100, 100, 150, 0.1)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <div style={{
-              width: '50px',
-              height: '50px',
+              width: '32px',
+              height: '32px',
               background: 'var(--primary-gradient)',
-              borderRadius: '15px',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '24px'
+              fontSize: '16px'
             }}>
               🤖
             </div>
             <div>
               <h1 style={{ 
                 margin: 0, 
-                fontSize: '24px',
-                background: 'var(--primary-gradient)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text'
+                fontSize: '14px',
+                fontWeight: '700',
+                color: '#1e1b4b'
               }}>
                 TeachAI
               </h1>
               <p style={{ 
                 margin: 0, 
-                color: 'var(--text-secondary)', 
-                fontSize: '14px' 
+                color: '#6b7280', 
+                fontSize: '9px' 
               }}>
-                Document Intelligence Platform
+                Intelligence Platform
               </p>
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button
-              onClick={() => setCurrentView('upload')}
-              className={currentView === 'upload' ? 'btn btn-primary' : 'btn btn-secondary'}
-            >
-              📥 Upload & Web Analysis
-            </button>
-            
-            <button
-              onClick={() => setCurrentView('history')}
-              className={currentView === 'history' ? 'btn btn-primary' : 'btn btn-secondary'}
-            >
-              📚 Document History
-            </button>
-            
-            <button
-              onClick={() => setCurrentView('chat')}
-              className={currentView === 'chat' ? 'btn btn-primary' : 'btn btn-secondary'}
-            >
-              💬 AI Chat
-            </button>
-            
-            <button
-              onClick={() => setCurrentView('validation')}
-              className={currentView === 'validation' ? 'btn btn-primary' : 'btn btn-secondary'}
-            >
-              🔍 Validation Dashboard
-            </button>
-            
-            <button
-              onClick={() => setCurrentView('status')}
-              className={currentView === 'status' ? 'btn btn-primary' : 'btn btn-secondary'}
-            >
-              🔧 System Status
-            </button>
-
-            <button
-              onClick={() => setCurrentView('mindmap')}
-              className={currentView === 'mindmap' ? 'btn btn-primary' : 'btn btn-secondary'}
-            >
-              🧠 Mind Map
-            </button>
+          <div style={{
+            padding: '4px 8px',
+            background: 'rgba(134, 239, 172, 0.2)',
+            borderRadius: '5px',
+            fontSize: '9px',
+            color: '#064e3b',
+            fontWeight: '600',
+            textAlign: 'center'
+          }}>
+            {documents.length} Documents Loaded
           </div>
         </div>
-      </nav>
 
-      {/* Main Content */}
-      <div style={{ padding: '0 20px', paddingBottom: '40px' }}>
-        {currentView === 'upload' ? (
-          <div className="animate-slideInLeft">
-            <div className="glass-card" style={{
-              padding: '30px',
-              borderRadius: '24px',
-              marginBottom: '30px'
-            }}>
-              <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                <h2 style={{ 
-                  fontSize: '32px', 
-                  marginBottom: '12px',
-                  background: 'var(--primary-gradient)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  📄 Document & Web Analysis
-                </h2>
-                <p style={{ 
-                  color: 'var(--text-secondary)', 
-                  fontSize: '16px',
-                  maxWidth: '600px',
-                  margin: '0 auto',
-                  lineHeight: '1.8'
-                }}>
-                  Upload documents or enter web/PDF URLs for intelligent AI analysis. 
-                  Our system extracts key information, summarizes content, and identifies topics.
-                </p>
-              </div>
-
-              {/* Combined Interface */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-                
-                {/* Left Column: File Upload */}
-                <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
-                    📤 Upload File
-                  </h3>
-                  <FileUploader onViewHistory={(docId) => {
-                    setSelectedDocumentForReview(docId);
-                    setCurrentView('review');
-                  }} />
-                </div>
-
-                {/* Right Column: Web Analysis */}
-                <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '15px', color: '#e5e7eb' }}>
-                    🌐 Web / PDF Link
-                  </h3>
-                  <WebAnalyzer />
-                </div>
-
-              </div>
-
-            </div>
-
-            <div className="glass-card" style={{
-              padding: '25px',
-              borderRadius: '20px',
-            }}>
-              <h3 style={{ 
-                marginBottom: '20px', 
-                color: 'var(--text-primary)',
+        {/* Navigation Menu */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '8px'
+        }}>
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setCurrentView(item.id)}
+              style={{
+                width: '100%',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px'
-              }}>
-                <span style={{
-                  width: '30px',
-                  height: '30px',
-                  background: 'var(--secondary-gradient)',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  🔄
-                </span>
-                Processing Workflow
-              </h3>
-              <div style={{ display: 'grid', gap: '15px' }}>
-                {[
-                  { icon: '📤', title: 'Upload / Input', desc: 'Secure document upload or web URL analysis' },
-                  { icon: '🧠', title: 'AI Analysis', desc: 'Extract text, summarize, identify topics and entities' },
-                  { icon: '📊', title: 'Confidence Check', desc: 'Low confidence items flagged for review' },
-                  { icon: '👤', title: 'Human Validation', desc: 'Review and edit AI analysis if needed' },
-                  { icon: '🔗', title: 'Vectorization', desc: 'Convert approved content to searchable vectors' },
-                  { icon: '🔍', title: 'Smart Search', desc: 'Ask natural language questions about documents' }
-                ].map((step, index) => (
-                  <div key={index} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '15px',
-                    padding: '15px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                    e.currentTarget.style.transform = 'translateX(5px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                    e.currentTarget.style.transform = 'translateX(0px)';
-                  }}>
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      background: 'var(--primary-gradient)',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '18px',
-                      flexShrink: 0
-                    }}>
-                      {step.icon}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                        {index + 1}. {step.title}
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                        {step.desc}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                justifyContent: 'space-between',
+                padding: '10px 12px',
+                marginBottom: '4px',
+                background: currentView === item.id 
+                  ? 'var(--primary-gradient)' 
+                  : 'transparent',
+                border: currentView === item.id 
+                  ? '1px solid rgba(168, 181, 255, 0.3)' 
+                  : '1px solid transparent',
+                borderRadius: '6px',
+                color: currentView === item.id ? '#1e1b4b' : '#4b5563',
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: currentView === item.id ? '700' : '600',
+                transition: 'all 0.2s ease',
+                textAlign: 'left'
+              }}
+              onMouseEnter={(e) => {
+                if (currentView !== item.id) {
+                  e.currentTarget.style.background = 'rgba(168, 181, 255, 0.1)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (currentView !== item.id) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '14px' }}>{item.icon}</span>
+                <span>{item.label}</span>
               </div>
-            </div>
+              {item.badge !== null && item.badge > 0 && (
+                <span style={{
+                  background: currentView === item.id 
+                    ? 'rgba(30, 27, 75, 0.15)' 
+                    : 'rgba(168, 181, 255, 0.3)',
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  fontSize: '9px',
+                  fontWeight: '700'
+                }}>
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Footer Info */}
+        <div style={{
+          padding: '8px',
+          borderTop: '1px solid rgba(100, 100, 150, 0.1)',
+          fontSize: '8px',
+          color: '#9ca3af'
+        }}>
+          <div style={{ 
+            padding: '6px', 
+            background: 'rgba(168, 181, 255, 0.1)', 
+            borderRadius: '4px',
+            marginBottom: '4px'
+          }}>
+            <div style={{ fontWeight: '600', marginBottom: '2px', color: '#6b7280' }}>Quick Actions</div>
+            <div>📤 Upload → 🧠 Analyze → ✓ Validate</div>
           </div>
-        ) : currentView === 'history' ? (
-          <DocumentHistory onReview={(docId) => {
-            setSelectedDocumentForReview(docId);
-            setCurrentView('review');
-          }} />
-        ) : currentView === 'chat' ? (
-          <AIChat documents={documents} />
-        ) : currentView === 'review' && selectedDocumentForReview ? (
-          <ComprehensiveDocumentReview 
-            documentId={selectedDocumentForReview} 
-            onClose={() => {
-              setCurrentView('history');
-              setSelectedDocumentForReview(null);
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '16px',
+        background: 'var(--light-gradient)'
+      }}>
+        {/* Content Header */}
+        <div className="glass-card" style={{
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div>
+            <h2 style={{
+              margin: 0,
+              fontSize: '16px',
+              fontWeight: '700',
+              color: '#111827'
+            }}>
+              {menuItems.find(m => m.id === currentView)?.icon} {menuItems.find(m => m.id === currentView)?.label}
+            </h2>
+            <p style={{
+              margin: 0,
+              fontSize: '10px',
+              color: '#6b7280'
+            }}>
+              {currentView === 'upload' && 'Upload and process document files'}
+              {currentView === 'web' && 'Analyze web pages and PDF URLs'}
+              {currentView === 'history' && 'View all processed documents'}
+              {currentView === 'chat' && 'Chat with your documents using AI'}
+              {currentView === 'validation' && 'Review and validate AI analysis'}
+              {currentView === 'mindmap' && 'Generate knowledge mind maps'}
+              {currentView === 'status' && 'System health and configuration'}
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(168, 181, 255, 0.2)',
+              border: '1px solid rgba(168, 181, 255, 0.3)',
+              borderRadius: '5px',
+              color: '#1e1b4b',
+              cursor: 'pointer',
+              fontSize: '10px',
+              fontWeight: '600'
             }}
-          />
-        ) : currentView === 'mindmap' ? (
-          <MindMapCanvas />
-        ) : currentView === 'status' ? (
-          <SystemStatus />
-        ) : (
-          <ValidationDashboard />
-        )}
+          >
+            🔄 Refresh
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div style={{
+          padding: '16px',
+          minHeight: 'calc(100vh - 120px)',
+          overflow: 'auto'
+        }}>
+          {currentView === 'upload' && (
+            <FileUploader onViewHistory={(docId) => setSelectedDocumentForReview(docId)} />
+          )}
+          
+          {currentView === 'web' && (
+            <WebAnalyzer />
+          )}
+          
+          {currentView === 'history' && (
+            <DocumentHistory onReview={(docId) => setSelectedDocumentForReview(docId)} />
+          )}
+          
+          {currentView === 'chat' && (
+            <AIChat documents={documents} />
+          )}
+          
+          {currentView === 'validation' && (
+            <ValidationDashboard />
+          )}
+          
+          {currentView === 'mindmap' && (
+            <MindMapCanvas />
+          )}
+          
+          {currentView === 'status' && (
+            <SystemStatus />
+          )}
+        </div>
       </div>
     </div>
   );

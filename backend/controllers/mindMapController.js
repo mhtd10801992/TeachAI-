@@ -2,7 +2,17 @@
 import OpenAI from 'openai';
 import { loadDocumentsFromFirebase, saveMindMapToFirebase, getMindMapFromFirebase, listMindMapsFromFirebase } from '../services/firebaseStorageService.js';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai = null;
+try {
+  if (process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    console.log('✅ OpenAI initialized for mind map generation');
+  } else {
+    console.log('⚠️  OpenAI API key not found - mind map generation will be limited');
+  }
+} catch (error) {
+  console.log('⚠️  OpenAI initialization failed - mind map generation will be limited');
+}
 
 // Categories for document classification
 const CATEGORIES = [
@@ -405,12 +415,14 @@ export const getAvailableDocuments = async (req, res) => {
     });
 
     console.log(`📤 Sending ${documentList.length} documents to frontend`);
-
-    res.json({
+    const responseData = {
       success: true,
       documents: documentList,
       total: documentList.length
-    });
+    };
+    console.log(`📦 Response size: ${JSON.stringify(responseData).length} bytes`);
+    res.json(responseData);
+    console.log('✅ Response sent successfully');
   } catch (error) {
     console.error('❌ Error getting documents:', error);
     res.status(500).json({ 

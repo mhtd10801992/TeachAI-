@@ -3,10 +3,10 @@ service firebase.storage {
   match /b/{bucket}/o {
     // TeachAI document storage rules
     match /TeachAI/{allPaths=**} {
-      // Allow read access to all authenticated users
-      allow read: if request.auth != null;
+      // Allow PUBLIC read access to all files (no authentication required)
+      allow read: if true;
       
-      // Allow write access for uploads
+      // Allow write access for uploads (backend only via Admin SDK)
       allow write: if request.auth != null
         && request.resource.size < 50 * 1024 * 1024  // 50MB max file size
         && request.resource.contentType.matches('application/pdf|application/msword|application/vnd.*|text/.*|image/.*');

@@ -19,21 +19,34 @@ export default function DocumentHistory({ onReview }) {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
+      setError(null);
       console.log('🔄 Fetching documents from API...');
       const response = await API.get('/documents');
       console.log('✅ API Response:', response.data);
-      setDocuments(response.data.documents || []);
+      
+      if (response.data && response.data.documents) {
+        setDocuments(response.data.documents);
+        console.log('✅ Set documents:', response.data.documents.length);
+      } else {
+        console.warn('⚠️ No documents in response');
+        setDocuments([]);
+      }
     } catch (err) {
-      setError('Failed to fetch documents');
       console.error('❌ API Error:', err);
       console.error('❌ Error details:', err.response?.data);
       console.error('❌ Error status:', err.response?.status);
       console.error('❌ Error message:', err.message);
-      console.error('❌ Request URL:', err.config?.url);
       
-      // Check if it's a network error
-      if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
-        setError('Cannot connect to backend server. If running locally, ensure backend is running on http://localhost:4000 and you are accessing the app at http://localhost:5173');
+      // Set error but keep any existing documents
+      const errorMessage = err.code === 'ERR_NETWORK' || err.message.includes('Network Error')
+        ? 'Cannot connect to backend server. Please ensure backend is running on http://localhost:4000'
+        : 'Failed to fetch documents';
+      
+      setError(errorMessage);
+      
+      // Don't clear documents on error - keep showing what we have
+      if (documents.length === 0) {
+        setDocuments([]);
       }
     } finally {
       setLoading(false);
@@ -43,9 +56,12 @@ export default function DocumentHistory({ onReview }) {
   const fetchStats = async () => {
     try {
       const response = await API.get('/documents/stats');
-      setStats(response.data.stats);
+      if (response.data && response.data.stats) {
+        setStats(response.data.stats);
+      }
     } catch (err) {
       console.error('Error fetching stats:', err);
+      // Don't fail if stats don't load - just log it
     }
   };
 
@@ -134,12 +150,12 @@ export default function DocumentHistory({ onReview }) {
 
   if (view === 'detail' && selectedDocument) {
     return (
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+      <div>
         {/* Header with back button */}
         <div className="glass-card" style={{
-          padding: '20px',
-          borderRadius: '16px',
-          marginBottom: '25px',
+          padding: '16px',
+          borderRadius: '12px',
+          marginBottom: '16px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
@@ -161,9 +177,9 @@ export default function DocumentHistory({ onReview }) {
 
         {/* Document metadata */}
         <div className="glass-card" style={{
-          padding: '20px',
-          borderRadius: '16px',
-          marginBottom: '25px'
+          padding: '16px',
+          borderRadius: '12px',
+          marginBottom: '16px'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{
@@ -207,29 +223,31 @@ export default function DocumentHistory({ onReview }) {
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+    <div>
       {/* Header */}
       <div className="glass-card" style={{
-        padding: '30px',
-        borderRadius: '20px',
-        marginBottom: '25px',
+        padding: '20px',
+        borderRadius: '12px',
+        marginBottom: '20px',
         textAlign: 'center'
       }}>
         <div style={{
-          width: '60px',
-          height: '60px',
+          width: '50px',
+          height: '50px',
           background: 'var(--primary-gradient)',
-          borderRadius: '15px',
+          borderRadius: '12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '28px',
-          margin: '0 auto 15px'
+          fontSize: '24px',
+          margin: '0 auto 12px'
         }}>
           📚
         </div>
         <h2 style={{
-          marginBottom: '8px',
+          marginBottom: '6px',
+          fontSize: '18px',
+          fontWeight: '700',
           background: 'var(--primary-gradient)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
@@ -237,7 +255,7 @@ export default function DocumentHistory({ onReview }) {
         }}>
           Document History & Analysis Ledger
         </h2>
-        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>
+        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '12px' }}>
           View and manage all your uploaded documents and their AI analysis results
         </p>
       </div>
@@ -246,9 +264,9 @@ export default function DocumentHistory({ onReview }) {
       {stats && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '20px',
-          marginBottom: '25px'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '12px',
+          marginBottom: '20px'
         }}>
           <StatCard
             icon="📊"
@@ -324,7 +342,7 @@ export default function DocumentHistory({ onReview }) {
           }}></div>
           <p>Loading documents...</p>
         </div>
-      ) : error ? (
+      ) : error && documents.length === 0 ? (
         <div className="glass-card" style={{
           padding: '20px',
           borderRadius: '16px',
@@ -350,13 +368,26 @@ export default function DocumentHistory({ onReview }) {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '15px' }}>
+          {error && (
+            <div className="glass-card" style={{
+              padding: '12px 16px',
+              borderRadius: '8px',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              background: 'rgba(245, 158, 11, 0.1)',
+              marginBottom: '15px'
+            }}>
+              <p style={{ color: '#f59e0b', margin: 0, fontSize: '12px' }}>
+                ⚠️ {error}
+              </p>
+            </div>
+          )}
           {documents.map((doc, index) => (
             <DocumentCard
-              key={doc.document.id}
+              key={doc.document?.id || index}
               document={doc}
               onView={() => viewDocument(doc)}
-              onDelete={() => deleteDocument(doc.document.id)}
-              onReview={() => onReview && onReview(doc.document.id)}
+              onDelete={() => doc.document?.id && deleteDocument(doc.document.id)}
+              onReview={() => doc.document?.id && onReview && onReview(doc.document.id)}
               formatDate={formatDate}
               formatFileSize={formatFileSize}
             />
@@ -398,6 +429,15 @@ const StatCard = ({ icon, title, value, color }) => (
 
 // Document Card Component
 const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, formatFileSize }) => {
+  // Safety checks
+  if (!document || !document.document) {
+    console.error('Invalid document structure:', document);
+    return null;
+  }
+
+  const doc = document.document;
+  const analysis = doc.analysis || {};
+  
   const getStatusColor = (status) => {
     switch (status) {
       case 'processed': return 'var(--success)';
@@ -412,11 +452,11 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
     return 'var(--error)';
   };
 
-  const averageConfidence = document.document.analysis ? (
-    (document.document.analysis.summary?.confidence || 0) +
-    (document.document.analysis.topics?.confidence || 0) +
-    (document.document.analysis.entities?.confidence || 0) +
-    (document.document.analysis.sentiment?.confidence || 0)
+  const averageConfidence = analysis ? (
+    (analysis.summary?.confidence || 0) +
+    (analysis.topics?.confidence || 0) +
+    (analysis.entities?.confidence || 0) +
+    (analysis.sentiment?.confidence || 0)
   ) / 4 : 0;
 
   return (
@@ -452,7 +492,7 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
               flex: 1,
               maxWidth: '100%'
             }}>
-              {document.document.filename}
+              {doc.filename || 'Unknown Document'}
             </h4>
             <span style={{
               background: getStatusColor(document.status),
@@ -463,7 +503,7 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
               fontWeight: '600',
               textTransform: 'uppercase'
             }}>
-              {document.status.replace('_', ' ')}
+              {(document.status || 'unknown').replace('_', ' ')}
             </span>
           </div>
           
@@ -472,14 +512,14 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
             fontSize: '14px',
             marginBottom: '10px'
           }}>
-            {formatFileSize(document.document.size)} • 
-            Uploaded {formatDate(document.document.uploadDate)}
+            {formatFileSize(doc.size || 0)} • 
+            Uploaded {formatDate(doc.uploadDate || new Date())}
           </div>
 
           {/* Topics */}
-          {document.document.analysis?.topics?.items && (
+          {analysis?.topics?.items && Array.isArray(analysis.topics.items) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
-              {document.document.analysis.topics.items.slice(0, 3).map((topic, i) => (
+              {analysis.topics.items.slice(0, 3).map((topic, i) => (
                 <span key={i} style={{
                   background: 'rgba(102, 126, 234, 0.2)',
                   color: 'var(--accent-blue)',
@@ -490,12 +530,12 @@ const DocumentCard = ({ document, onView, onDelete, onReview, formatDate, format
                   {topic}
                 </span>
               ))}
-              {document.document.analysis.topics.items.length > 3 && (
+              {analysis.topics.items.length > 3 && (
                 <span style={{
                   color: 'var(--text-secondary)',
                   fontSize: '12px'
                 }}>
-                  +{document.document.analysis.topics.items.length - 3} more
+                  +{analysis.topics.items.length - 3} more
                 </span>
               )}
             </div>

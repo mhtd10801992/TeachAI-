@@ -39,8 +39,14 @@ let documentHistory = [];
 
 // Initialize document cache from Firebase storage
 const initializeDocumentCache = async () => {
-  documentHistory = await loadDocumentsFromFirebase();
-  console.log(`Loaded ${documentHistory.length} documents from Firebase Storage`);
+  try {
+    console.log('📦 Loading documents from Firebase...');
+    documentHistory = await loadDocumentsFromFirebase();
+    console.log(`✅ Loaded ${documentHistory.length} documents from Firebase Storage`);
+  } catch (error) {
+    console.error('❌ Error initializing document cache:', error);
+    documentHistory = [];
+  }
 };
 
 // Save a processed document to history (both memory and Firebase)

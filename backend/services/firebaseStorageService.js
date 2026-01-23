@@ -23,7 +23,7 @@ const LOCAL_STORAGE = {
 // Cache for document list
 let documentsCache = null;
 let cacheTimestamp = null;
-const CACHE_DURATION = 30000; // 30 seconds
+const CACHE_DURATION = 300000; // 5 minutes
 
 // Initialize Firebase Admin (if not already initialized)
 let firebaseApp;
@@ -357,33 +357,44 @@ export const saveUploadedFileToFirebase = async (file, documentId) => {
 // Load all documents from Firebase Storage or local fallback
 export const loadDocumentsFromFirebase = async (useCache = true) => {
   try {
+    console.log('Step 1: Checking cache...');
     // Check cache first
     if (useCache && documentsCache && cacheTimestamp && (Date.now() - cacheTimestamp < CACHE_DURATION)) {
       console.log(`📦 Returning ${documentsCache.length} documents from cache`);
       return documentsCache;
     }
     
+    console.log('Step 2: Cache miss, loading from Firebase...');
     if (useFirebase && bucket) {
       // Firebase Storage
+      console.log('Step 3: Getting files from bucket...');
       const [files] = await bucket.getFiles({
         prefix: FIREBASE_PATHS.DOCUMENTS
       });
       
+      console.log(`Step 4: Found ${files.length} total files`);
+      const jsonFiles = files.filter(file => file.name.endsWith('.json'));
+      console.log(`Step 5: Found ${jsonFiles.length} JSON document files`);
+      
       // Load documents in parallel for speed
-      const documentPromises = files
-        .filter(file => file.name.endsWith('.json'))
-        .map(async (file) => {
+      console.log('Step 6: Starting parallel download...');
+      const documentPromises = jsonFiles.map(async (file, index) => {
           try {
+            console.log(`Downloading ${index + 1}/${jsonFiles.length}: ${file.name}`);
             const [content] = await file.download();
-            return JSON.parse(content.toString());
+            const documentData = JSON.parse(content.toString());
+            console.log(`✓ Loaded: ${documentData.document?.filename || 'unknown'}`);
+            return documentData;
           } catch (error) {
             console.error(`Error loading document ${file.name}:`, error);
             return null;
           }
         });
       
+      console.log('Step 7: Awaiting all downloads...');
       const documents = (await Promise.all(documentPromises)).filter(doc => doc !== null);
       
+      console.log('Step 8: Sorting documents...');
       documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       console.log(`✅ Loaded ${documents.length} documents from Firebase`);
       
@@ -566,9 +577,46 @@ export const getDocumentFromFirebase = async (documentId) => {
     const [content] = await file.download();
     const documentData = JSON.parse(content.toString());
     
+    // Add public URL for uploaded file if it exists
+    if (documentData.storagePath) {
+      documentData.publicUrl = await getPublicFileUrl(documentData.storagePath);
+    }
+    
     return documentData;
   } catch (error) {
     console.error(`Error getting document ${documentId} from Firebase:`, error);
+    return null;
+  }
+};
+
+// Generate public URL for a Firebase Storage file
+export const getPublicFileUrl = async (storagePath) => {
+  try {
+    if (useFirebase && bucket) {
+      const file = bucket.file(storagePath);
+      
+      // Check if file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        console.warn(`File not found: ${storagePath}`);
+        return null;
+      }
+      
+      // Try to make public (idempotent - safe to call multiple times)
+      try {
+        await file.makePublic();
+      } catch (publicError) {
+        // File might already be public or we don't have permission
+        console.log('Note: Could not make file public (may already be public)');
+      }
+      
+      // Generate public URL
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+      return publicUrl;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error generating public URL:', error);
     return null;
   }
 };

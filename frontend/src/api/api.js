@@ -13,7 +13,7 @@ const getBaseURL = () => {
 
 const API = axios.create({
   baseURL: getBaseURL(),
-  timeout: 30000, // 30 second timeout
+  timeout: 90000, // 90 second timeout
 });
 
 // Retry configuration for QUIC protocol errors
